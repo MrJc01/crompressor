@@ -1,0 +1,40 @@
+# ═══ Binários ═══
+bin/
+crom
+crompressor_gui
+*.exe
+
+# ═══ Test Artifacts ═══
+testdata/mini.cromdb
+testdata/sample_*.bin
+/tmp/
+
+# ═══ Frontend (Node/React) ═══
+ui/node_modules/
+ui/dist/
+ui/.vite/
+
+# ═══ IDE ═══
+.idea/
+.vscode/
+*.swp
+*.swo
+*.code-workspace
+
+# ═══ OS ═══
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ═══ Go ═══
+vendor/
+*.test
+coverage.out
+
+# ═══ CROM Runtime ═══
+*.crom
+*.cromdb
+!testdata/*.cromdb
+
+# ═══ Logs ═══
+*.log
