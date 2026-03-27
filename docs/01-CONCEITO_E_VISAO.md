@@ -59,8 +59,8 @@ No paradigma CROM, a compressão é tratada como um processo de **compilação**
 - **Arquivo Original** = Código-fonte
 - **Codebook** = Biblioteca padrão + runtime
 - **Arquivo .crom** = Binário compilado (bytecode de referências)
-- **crom-pack** = Compilador
-- **crom-unpack** = Decompilador / Máquina Virtual
+- **crompressor-pack** = Compilador
+- **crompressor-unpack** = Decompilador / Máquina Virtual
 
 Assim como um compilador C++ não precisa incluir toda a `libc` dentro de cada executável (porque ela já está no sistema), o CROM não precisa incluir os padrões dentro do arquivo comprimido — **porque eles já estão no Codebook local**.
 
@@ -101,4 +101,4 @@ Cada Codebook pode ser distribuído separadamente, como um "runtime" específico
 
 ---
 
-> **Próximo:** [02 - Arquitetura do Sistema](02-ARQUITETURA_DO_SISTEMA.md) — O fluxo detalhado entre `crom-pack` e `crom-unpack`.
+> **Próximo:** [02 - Arquitetura do Sistema](02-ARQUITETURA_DO_SISTEMA.md) — O fluxo detalhado entre `crompressor-pack` e `crompressor-unpack`.

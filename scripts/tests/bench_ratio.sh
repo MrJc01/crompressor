@@ -17,7 +17,7 @@ for i in {1..50000}; do echo "The quick brown fox jumps over the lazy dog. CROMp
 for i in {1..10000}; do echo "func TestData$i() { return \"data_chunk_repeated_pattern\" }" >> code.go; done
 
 # Assume-se que o CLI do crom já está no PATH ou no dir pai do projeto
-CROM_BIN="/home/j/Área de trabalho/crompessor/crom"
+CROM_BIN="/home/j/Área de trabalho/crompressor/crompressor"
 CB_PATH="global_bench.cromdb"
 
 echo "[*] Treinando Codebook Global..."

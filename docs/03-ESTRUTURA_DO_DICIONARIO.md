@@ -8,7 +8,7 @@
 
 O Codebook Universal (`.cromdb`) é o componente central do CROM. É um **banco de dados binário estático** de 50GB+ que contém bilhões de fragmentos de padrões binários (chamados **Codewords**, ou "palavras-código") extraídos de datasets massivos.
 
-Ele funciona como uma **tabela de consulta universal** onde cada padrão binário tem um **ID único** (índice numérico). O compilador `crom-pack` busca padrões similares nesta tabela; o decompilador `crom-unpack` faz lookups diretos por ID.
+Ele funciona como uma **tabela de consulta universal** onde cada padrão binário tem um **ID único** (índice numérico). O compilador `crompressor-pack` busca padrões similares nesta tabela; o decompilador `crompressor-unpack` faz lookups diretos por ID.
 
 ---
 
@@ -264,7 +264,7 @@ Cada Codebook possui um **Build Hash** (SHA-256 de todo o conteúdo). Este hash 
 └────────────────┘     └──────────────────┘
 ```
 
-Se os hashes não corresponderem, o `crom-unpack` **recusa** a descompressão com erro explícito.
+Se os hashes não corresponderem, o `crompressor-unpack` **recusa** a descompressão com erro explícito.
 
 ---
 

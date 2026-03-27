@@ -12,18 +12,18 @@ A escolha de Go, e não Python, Rust ou C++, é **deliberada** e fundamentada em
 
 ```bash
 # Um único arquivo. Sem runtime. Sem dependências.
-$ file crom-unpack
-crom-unpack: ELF 64-bit LSB executable, x86-64, statically linked
+$ file crompressor-unpack
+crompressor-unpack: ELF 64-bit LSB executable, x86-64, statically linked
 
 # O usuário baixa, executa, descomprime. Fim.
-$ ./crom-unpack --input dados.crom --codebook crom.cromdb --output ./
+$ ./crompressor-unpack --input dados.crom --codebook crom.cromdb --output ./
 ```
 
-Go compila para **binários estáticos** — o `crom-unpack` pode ser distribuído como um único executável que roda em qualquer Linux/macOS/Windows sem instalar nada.
+Go compila para **binários estáticos** — o `crompressor-unpack` pode ser distribuído como um único executável que roda em qualquer Linux/macOS/Windows sem instalar nada.
 
 ### 2. Goroutines (Paralelismo Nativo)
 
-O compilador `crom-pack` processa milhões de chunks. Go oferece goroutines com custo de criação de ~2KB cada (vs. ~1MB por thread em Java/C++):
+O compilador `crompressor-pack` processa milhões de chunks. Go oferece goroutines com custo de criação de ~2KB cada (vs. ~1MB por thread em Java/C++):
 
 ```go
 // Processar 8M chunks em paralelo com pool de N workers
@@ -45,9 +45,9 @@ Go tem suporte direto a `syscall.Mmap()` — essencial para acessar o Codebook d
 
 ```bash
 # Compilar para todas as plataformas de uma vez
-GOOS=linux   GOARCH=amd64 go build -o crom-pack-linux   ./cmd/crom-pack
-GOOS=darwin  GOARCH=arm64 go build -o crom-pack-macos   ./cmd/crom-pack
-GOOS=windows GOARCH=amd64 go build -o crom-pack.exe     ./cmd/crom-pack
+GOOS=linux   GOARCH=amd64 go build -o crompressor-pack-linux   ./cmd/crompressorpressor-pack
+GOOS=darwin  GOARCH=arm64 go build -o crompressor-pack-macos   ./cmd/crompressorpressor-pack
+GOOS=windows GOARCH=amd64 go build -o crompressor-pack.exe     ./cmd/crompressorpressor-pack
 ```
 
 ### 5. Tooling Integrado
@@ -140,11 +140,11 @@ require (
 ## Estrutura de Diretórios
 
 ```
-crompessor/
+crompressor/
 ├── cmd/
-│   ├── crom-pack/main.go       # CLI Compilador
-│   ├── crom-unpack/main.go     # CLI Decompilador
-│   └── crom-verify/main.go     # CLI Verificação
+│   ├── crompressor-pack/main.go       # CLI Compilador
+│   ├── crompressor-unpack/main.go     # CLI Decompilador
+│   └── crompressor-verify/main.go     # CLI Verificação
 ├── internal/
 │   ├── chunker/                # Engine de chunking
 │   ├── codebook/               # Acesso ao Codebook (mmap + lookup)

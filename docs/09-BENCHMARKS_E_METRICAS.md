@@ -49,8 +49,8 @@ Meta Prod: PMR > 75%
 ### 4. Velocidade
 
 ```
-Compile Speed  = MB/s de dados processados pelo crom-pack
-Unpack Speed   = MB/s de dados reconstruídos pelo crom-unpack
+Compile Speed  = MB/s de dados processados pelo crompressor-pack
+Unpack Speed   = MB/s de dados reconstruídos pelo crompressor-unpack
 ```
 
 ---
@@ -146,7 +146,7 @@ benchstat old.txt new.txt
 
 ```bash
 # Analisar cobertura do Codebook contra um dataset
-crom analyze --codebook crom.cromdb --input ./dataset/
+crompressor analyze --codebook crom.cromdb --input ./dataset/
 
 # Saída esperada:
 # ╔═══════════════════════════════════════════╗

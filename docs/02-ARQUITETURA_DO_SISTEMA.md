@@ -13,7 +13,7 @@ O CROM opera como um sistema de **compilação/decompilação** simétrico, comp
 │                        CROM RUNTIME                                 │
 │                                                                     │
 │  ┌──────────────┐    ┌────────────────┐    ┌──────────────────┐    │
-│  │  crom-pack   │    │   Codebook     │    │   crom-unpack    │    │
+│  │  crompressor-pack   │    │   Codebook     │    │   crompressor-unpack    │    │
 │  │ (Compilador) │◄──▶│  Universal     │◄──▶│ (Decompilador)   │    │
 │  └──────┬───────┘    │  (.cromdb)     │    └──────┬───────────┘    │
 │         │            │   50GB+        │           │                 │
@@ -28,7 +28,7 @@ O CROM opera como um sistema de **compilação/decompilação** simétrico, comp
 
 ---
 
-## Pipeline do `crom-pack` (Compilador)
+## Pipeline do `crompressor-pack` (Compilador)
 
 O compilador transforma arquivos originais em arquivos `.crom` — estruturas compactas de referências.
 
@@ -129,13 +129,13 @@ O Delta é o **XOR** entre o chunk original e o padrão encontrado no Codebook. 
 
 ---
 
-## Pipeline do `crom-unpack` (Decompilador)
+## Pipeline do `crompressor-unpack` (Decompilador)
 
 O decompilador é **mais simples e mais rápido** que o compilador, pois não precisa fazer buscas — apenas lookups diretos.
 
 ```
 ┌───────────────────────────────────────────────────┐
-│                  crom-unpack                       │
+│                  crompressor-unpack                       │
 │                                                    │
 │  1. Ler Header do .crom                            │
 │     └─ Validar Magic Number e versão               │
@@ -162,8 +162,8 @@ O decompilador é **mais simples e mais rápido** que o compilador, pois não pr
 
 | Operação | Complexidade | Tempo Estimado (1GB) |
 |---|---|---|
-| **crom-pack** (Compilação) | O(n × log M) | ~30-120 segundos |
-| **crom-unpack** (Decompilação) | O(n) | ~2-5 segundos |
+| **crompressor-pack** (Compilação) | O(n × log M) | ~30-120 segundos |
+| **crompressor-unpack** (Decompilação) | O(n) | ~2-5 segundos |
 
 Onde:
 - `n` = número de chunks no arquivo
@@ -177,11 +177,11 @@ A compilação é **deliberadamente mais lenta** (pois envolve busca HNSW), enqu
 
 ```
 cmd/
-├── crom-pack/           # CLI do Compilador
+├── crompressor-pack/           # CLI do Compilador
 │   └── main.go
-├── crom-unpack/         # CLI do Decompilador
+├── crompressor-unpack/         # CLI do Decompilador
 │   └── main.go
-└── crom-verify/         # CLI de Verificação
+└── crompressor-verify/         # CLI de Verificação
     └── main.go
 
 internal/

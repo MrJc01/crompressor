@@ -1,15 +1,15 @@
 # Relatório de Auditoria CROM
 
-**Data da Execução:** 2026-03-25 20:18:58
+**Data da Execução:** 2026-03-26 23:19:09
 
 ## 1. Bench Ratio (Eficiência de Compressão)
 
 | Arquivo | Tamanho Original | Tamanho CROM | 
 |---------|------------------|--------------|
 | ARQUIVO | TAMANHO_ORIG(bytes) | TAMANHO_CROM(bytes) |
-| random.bin | 5242880 | 5632427 |
-| text.txt | 3638894 | 780700 |
-| code.go | 608894 | 135693 |
+| random.bin | 5242880 | 5629159 |
+| text.txt | 3638894 | 783258 |
+| code.go | 608894 | 136233 |
 
 *O Hit Rate pode ser calculado comparando as colunas.*
 
@@ -29,12 +29,12 @@ Diferença Absoluta: 10 bytes
 ╔═══════════════════════════════════════════╗
 ║          CROM TRAIN (Treinador)           ║
 ╠═══════════════════════════════════════════╣
-║  Input Dir: /tmp/crom_sov_28258/secret.txt ║
-║  Output:    /tmp/crom_sov_28258/sov.cromdb ║
+║  Input Dir: /tmp/crom_sov_34264/secret.txt ║
+║  Output:    /tmp/crom_sov_34264/sov.cromdb ║
 ║  Target:    8192                          ║
 ╚═══════════════════════════════════════════╝
 
-✔ Training completed in 105.33337ms
+✔ Training completed in 180.736163ms
   Files Parsed:    1
   Total Bytes:     1048603
   Unique Patterns: 8192
@@ -42,12 +42,12 @@ Diferença Absoluta: 10 bytes
 ╔═══════════════════════════════════════════╗
 ║            CROM PACK (Compilador)         ║
 ╠═══════════════════════════════════════════╣
-║  Input:    /tmp/crom_sov_28258/secret.txt ║
-║  Output:   /tmp/crom_sov_28258/vault.crom ║
-║  Codebook: /tmp/crom_sov_28258/sov.cromdb ║
+║  Input:    /tmp/crom_sov_34264/secret.txt ║
+║  Output:   /tmp/crom_sov_34264/vault.crom ║
+║  Codebook: /tmp/crom_sov_34264/sov.cromdb ║
 ╚═══════════════════════════════════════════╝
 
-✔ Pack completed in 48.92689ms
+✔ Pack completed in 82.277329ms
   Original Size: 1048603 bytes
   Packed Size:   196780 bytes (18.77% ratio)
   Hit Rate:      99.99% dos chunks no Radar
@@ -55,20 +55,24 @@ Diferença Absoluta: 10 bytes
 ╔═══════════════════════════════════════════╗
 ║       CROM VFS (Virtual Filesystem)       ║
 ╠═══════════════════════════════════════════╣
-║  Input:    /tmp/crom_sov_28258/vault.crom ║
-║  Mount:    /tmp/crom_sov_28258/mnt        ║
-║  Codebook: /tmp/crom_sov_28258/sov.cromdb ║
+║  Input:    /tmp/crom_sov_34264/vault.crom ║
+║  Mount:    /tmp/crom_sov_34264/mnt        ║
+║  Codebook: /tmp/crom_sov_34264/sov.cromdb ║
 ╚═══════════════════════════════════════════╝
 ✔ CROM Virtual Filesystem montado com sucesso!
-  Arquivo:  /tmp/crom_sov_28258/vault.crom
-  Ponto:    /tmp/crom_sov_28258/mnt
-  Codebook: /tmp/crom_sov_28258/sov.cromdb
+  Arquivo:  /tmp/crom_sov_34264/vault.crom
+  Ponto:    /tmp/crom_sov_34264/mnt
+  Codebook: /tmp/crom_sov_34264/sov.cromdb
   Soberania: Watcher ativo (codebook + signals)
 Pressione Ctrl+C para desmontar...
-cat: /tmp/crom_sov_28258/mnt/vault: Operação sem suporte
+vfs: read error at off=0 len=131072: vfs: lookup codeword 10445360463872: codebook: lookup out of bounds: id=10445360463872, count=8192
+vfs: read error at off=0 len=4096: vfs: lookup codeword 10445360463872: codebook: lookup out of bounds: id=10445360463872, count=8192
+vfs: read error at off=131072 len=131072: vfs: lookup codeword 562949953421312: codebook: lookup out of bounds: id=562949953421312, count=8192
+cat: /tmp/crom_sov_34264/mnt/vault: Erro de entrada/saída
 [FAIL] Não foi possível ler o arquivo do FUSE Mount!
 
 ⚡ Sinal recebido (terminated). Desmontando VFS...
+✔ VFS desmontado com sucesso: /tmp/crom_sov_34264/mnt
 
 ```
 

@@ -20,7 +20,7 @@ O CROM não comprime — ele **compila**. Transforma dados brutos em um **mapa d
 
 ```
 ┌──────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│ Arquivo      │────▶│   crom-pack      │────▶│  .crom (mapa    │
+│ Arquivo      │────▶│   crompressor-pack      │────▶│  .crom (mapa    │
 │ Original     │     │  (Compilador)    │     │   de IDs +      │
 │ (1TB)        │     │                  │     │   Resíduos)     │
 └──────────────┘     └──────────────────┘     │  (~10GB)        │
@@ -45,7 +45,7 @@ O CROM não comprime — ele **compila**. Transforma dados brutos em um **mapa d
 ## Arquitetura Resumida
 
 ```
-crom-pack (Compilador)                    crom-unpack (Decompilador)
+crompressor-pack (Compilador)                    crompressor-unpack (Decompilador)
 ┌─────────────────────┐                   ┌──────────────────────────┐
 │ 1. Chunking         │                   │ 1. Leitura do .crom      │
 │ 2. Busca HNSW       │                   │ 2. Lookup no Codebook    │
@@ -59,13 +59,13 @@ crom-pack (Compilador)                    crom-unpack (Decompilador)
 
 ```bash
 # Compilar (comprimir)
-crom pack --input ./meus_dados/ --output ./backup.crom --codebook ./codebook.cromdb
+crompressor pack --input ./meus_dados/ --output ./backup.crom --codebook ./codebook.cromdb
 
 # Decompildar (descomprimir)
-crom unpack --input ./backup.crom --output ./restaurado/ --codebook ./codebook.cromdb
+crompressor unpack --input ./backup.crom --output ./restaurado/ --codebook ./codebook.cromdb
 
 # Validar integridade
-crom verify --original ./meus_dados/ --restored ./restaurado/
+crompressor verify --original ./meus_dados/ --restored ./restaurado/
 ```
 
 ## Documentação
@@ -73,7 +73,7 @@ crom verify --original ./meus_dados/ --restored ./restaurado/
 | Documento | Descrição |
 |---|---|
 | [01 - Conceito e Visão](docs/01-CONCEITO_E_VISAO.md) | Compressão estatística vs. baseada em conhecimento |
-| [02 - Arquitetura do Sistema](docs/02-ARQUITETURA_DO_SISTEMA.md) | Fluxo completo crom-pack / crom-unpack |
+| [02 - Arquitetura do Sistema](docs/02-ARQUITETURA_DO_SISTEMA.md) | Fluxo completo crompressor-pack / crompressor-unpack |
 | [03 - Estrutura do Dicionário](docs/03-ESTRUTURA_DO_DICIONARIO.md) | Codebook de 50GB, mmap e indexação HNSW |
 | [04 - Especificação do Compilador](docs/04-ESPECIFICACAO_DO_COMPILADOR.md) | Chunking, KNN e mapa de IDs |
 | [05 - Camada de Refinamento](docs/05-CAMADA_DE_REFINAMENTO.md) | Delta Lossless e garantia bit-a-bit |

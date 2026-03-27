@@ -8,7 +8,7 @@ WORKSPACE="/tmp/crom_sov_$$"
 mkdir -p "$WORKSPACE"
 cd "$WORKSPACE"
 
-CROM_BIN="/home/j/Área de trabalho/crompessor/crom"
+CROM_BIN="/home/j/Área de trabalho/crompressor/crompressor"
 CB_PATH="$WORKSPACE/sov.cromdb"
 VAULT_PATH="$WORKSPACE/vault.crom"
 MNT_POINT="$WORKSPACE/mnt"

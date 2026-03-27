@@ -8,7 +8,7 @@ WORKSPACE="/tmp/crom_fuzz_$$"
 mkdir -p "$WORKSPACE"
 cd "$WORKSPACE"
 
-CROM_BIN="/home/j/Área de trabalho/crompessor/crom"
+CROM_BIN="/home/j/Área de trabalho/crompressor/crompressor"
 CB_PATH="fuzz.cromdb"
 
 echo "[*] Criando imagem/binário de testes..."

@@ -11,7 +11,7 @@ O conceito mais revolucionário do CROM: se o Codebook contém a "essência" de 
 ### Como Funciona
 
 ```
-Foto Original (10MB) → crom-pack → foto.crom (50KB)
+Foto Original (10MB) → crompressor-pack → foto.crom (50KB)
 
 foto.crom contém:
   chunk[0] = ID:402991  (céu azul, gradiente suave)
@@ -44,7 +44,7 @@ Sem CROM:
   10TB de logs → gzip → 2TB comprimidos → armazenados
 
 Com CROM:
-  10TB de logs → crom-pack (Codebook treinado em logs) → 200GB
+  10TB de logs → crompressor-pack (Codebook treinado em logs) → 200GB
   
   Por quê? Logs são 80% repetitivos:
   - Timestamps com padrões conhecidos
@@ -124,7 +124,7 @@ foto_monte.jpg  → IDs: [402, 119, 338, 445, ...]
 Modelos de ML (PyTorch, TensorFlow) são arquivos massivos com muita redundância interna (pesos repetitivos, zeros, padrões de quantização):
 
 ```
-llama-7b.bin (14GB) → crom-pack → llama-7b.crom (~2-4GB)
+llama-7b.bin (14GB) → crompressor-pack → llama-7b.crom (~2-4GB)
 
 Com Codebook treinado em pesos de modelos:
   - Padrões de quantização INT8/FP16 → IDs conhecidos

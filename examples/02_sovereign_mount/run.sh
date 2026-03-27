@@ -4,14 +4,14 @@ set -e
 echo "[*] Preparando cenário..."
 echo "ARQUIVO ULTRA SECRETO" > segredo.txt
 head -c 1M </dev/urandom >> segredo.txt
-../../crom train --input segredo.txt --output sovereign.cromdb
-../../crom pack --input segredo.txt --codebook sovereign.cromdb --output vault.crom
+../../crompressor train --input segredo.txt --output sovereign.cromdb
+../../crompressor pack --input segredo.txt --codebook sovereign.cromdb --output vault.crom
 
 MNT_POINT="/tmp/trom_mnt_test"
 mkdir -p "$MNT_POINT"
 
 echo "[*] Montando com Sovereignty... (FUSE)"
-../../crom mount --input vault.crom --codebook sovereign.cromdb --mountpoint "$MNT_POINT" &
+../../crompressor mount --input vault.crom --codebook sovereign.cromdb --mountpoint "$MNT_POINT" &
 MNT_PID=$!
 
 sleep 2

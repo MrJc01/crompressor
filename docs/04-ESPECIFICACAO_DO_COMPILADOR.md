@@ -1,12 +1,12 @@
-# 04 — Especificação do Compilador (`crom-pack`)
+# 04 — Especificação do Compilador (`crompressor-pack`)
 
 > *"O compilador não inventa. Ele traduz o arquivo para a linguagem do Codebook."*
 
 ---
 
-## Responsabilidade do `crom-pack`
+## Responsabilidade do `crompressor-pack`
 
-O `crom-pack` é o binário mais complexo do sistema CROM. Sua função é:
+O `crompressor-pack` é o binário mais complexo do sistema CROM. Sua função é:
 
 1. **Ler** o arquivo original
 2. **Fragmentar** em chunks otimizados
@@ -313,7 +313,7 @@ Para datasets bem cobertos pelo Codebook:
 
 ## Estatísticas de Compilação
 
-Após a compilação, o `crom-pack` exibe um relatório:
+Após a compilação, o `crompressor-pack` exibe um relatório:
 
 ```
 ╔═══════════════════════════════════════════════════╗

@@ -31,8 +31,8 @@
 | Dia | Tarefa | Critério de Sucesso |
 |---|---|---|
 | 1-2 | Definir e implementar formato `.crom` (header + chunk table + delta pool) | Serialização e deserialização roundtrip perfeito |
-| 2-3 | Criar `crom-pack` CLI (cobra) | `crom pack -i file -o out.crom -c mini.cromdb` funciona |
-| 3-4 | Criar `crom-unpack` CLI | `crom unpack -i out.crom -o restored -c mini.cromdb` funciona |
+| 2-3 | Criar `crompressor-pack` CLI (cobra) | `crompressor pack -i file -o out.crom -c mini.cromdb` funciona |
+| 3-4 | Criar `crompressor-unpack` CLI | `crompressor unpack -i out.crom -o restored -c mini.cromdb` funciona |
 | 4-5 | Implementar verificação SHA-256 | `sha256sum original == sha256sum restored` ✅ |
 | 5 | Paralelizar compilação com goroutines | Speedup >3x em CPU de 4+ cores |
 
@@ -43,7 +43,7 @@
 | 1-2 | Criar suite de benchmarks (`go test -bench`) | Métricas: MB/s compile, MB/s unpack, PMR |
 | 2-3 | Testar com dataset real (1GB de arquivos mistos) | Compressão >5:1 com mini-Codebook |
 | 3-4 | Comparar com `gzip -9` e `zstd -19` | Documentar resultados em tabela |
-| 4 | Criar comando `crom analyze` (cobertura do Codebook) | Relatório de PMR e CR estimado |
+| 4 | Criar comando `crompressor analyze` (cobertura do Codebook) | Relatório de PMR e CR estimado |
 | 5 | Finalizar documentação e README | Projeto compilável e testável por terceiros |
 
 ---
@@ -67,16 +67,16 @@
 - [ ] `internal/format/writer.go` — Serialização do .crom
 - [ ] `internal/format/reader.go` — Deserialização do .crom
 - [ ] `internal/verify/sha256.go` — Validação de integridade
-- [ ] `cmd/crom-pack/main.go` — CLI do compilador
-- [ ] `cmd/crom-unpack/main.go` — CLI do decompilador
+- [ ] `cmd/crompressorpressor-pack/main.go` — CLI do compilador
+- [ ] `cmd/crompressorpressor-unpack/main.go` — CLI do decompilador
 
 ### 🟢 P2 — Desejável (Semana 3-4)
 
 - [ ] Pipeline paralelo (goroutines + semáforo)
 - [ ] Progress bar (schollz/progressbar)
 - [ ] Relatório de compilação (estatísticas detalhadas)
-- [ ] `cmd/crom-verify/main.go` — CLI de verificação
-- [ ] `cmd/crom-analyze/main.go` — Análise de cobertura
+- [ ] `cmd/crompressorpressor-verify/main.go` — CLI de verificação
+- [ ] `cmd/crompressorpressor-analyze/main.go` — Análise de cobertura
 
 ### 🔵 P3 — Futuro (Pós-MVP)
 
@@ -93,16 +93,16 @@
 ## Estrutura de Diretórios do Repositório
 
 ```
-crompessor/
+crompressor/
 │
 ├── cmd/                            # Binários executáveis
-│   ├── crom-pack/
+│   ├── crompressor-pack/
 │   │   └── main.go                 # CLI: compilador
-│   ├── crom-unpack/
+│   ├── crompressor-unpack/
 │   │   └── main.go                 # CLI: decompilador
-│   ├── crom-verify/
+│   ├── crompressor-verify/
 │   │   └── main.go                 # CLI: verificador
-│   └── crom-analyze/
+│   └── crompressor-analyze/
 │       └── main.go                 # CLI: analisador de cobertura
 │
 ├── internal/                       # Pacotes internos (não exportados)
@@ -173,9 +173,9 @@ crompessor/
 .PHONY: build test bench clean
 
 build:
-	go build -o bin/crom-pack   ./cmd/crom-pack
-	go build -o bin/crom-unpack ./cmd/crom-unpack
-	go build -o bin/crom-verify ./cmd/crom-verify
+	go build -o bin/crompressor-pack   ./cmd/crompressorpressor-pack
+	go build -o bin/crompressor-unpack ./cmd/crompressorpressor-unpack
+	go build -o bin/crompressor-verify ./cmd/crompressorpressor-verify
 
 test:
 	go test -v -race ./...
@@ -192,9 +192,9 @@ lint:
 
 demo: build
 	@echo "=== Compilando arquivo de teste ==="
-	./bin/crom-pack -i testdata/sample_1mb.bin -o /tmp/test.crom -c testdata/mini.cromdb
+	./bin/crompressor-pack -i testdata/sample_1mb.bin -o /tmp/test.crom -c testdata/mini.cromdb
 	@echo "=== Descompilando ==="
-	./bin/crom-unpack -i /tmp/test.crom -o /tmp/restored.bin -c testdata/mini.cromdb
+	./bin/crompressor-unpack -i /tmp/test.crom -o /tmp/restored.bin -c testdata/mini.cromdb
 	@echo "=== Verificando integridade ==="
 	sha256sum testdata/sample_1mb.bin /tmp/restored.bin
 ```
