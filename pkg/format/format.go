@@ -39,8 +39,9 @@ const (
 	// EntrySize is the fixed size of a ChunkEntry in the Chunk Table (24 bytes).
 	EntrySize = 8 + 8 + 4 + 4
 
-	// ChunksPerBlock is the number of chunks grouped into a single Zstd frame in V2 (8192 chunks = 1MB).
-	ChunksPerBlock = 8192
+	// ChunksPerBlock is the number of chunks grouped into a single Zstd frame in V2.
+	// Must match cromlib.BlockSize / chunker.DefaultChunkSize = 16MB / 128B = 131072.
+	ChunksPerBlock = 131072
 )
 
 // Header contains the top-level metadata of a .crom file.

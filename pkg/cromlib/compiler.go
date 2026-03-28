@@ -71,7 +71,9 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		return nil, err
 	}
 	originalSize := uint64(info.Size())
-	numExpectedChunks := uint32((originalSize + chunker.DefaultChunkSize - 1) / chunker.DefaultChunkSize)
+	// Pre-calculate an estimate for dummy space allocation.
+	// The REAL chunk count will be set after the processing loop.
+	numEstimatedChunks := uint32((originalSize + chunker.DefaultChunkSize - 1) / chunker.DefaultChunkSize)
 
 	outFile, err := os.Create(outputPath)
 	if err != nil {
@@ -83,7 +85,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	header := &format.Header{
 		Version:      format.Version2,
 		OriginalSize: originalSize,
-		ChunkCount:   numExpectedChunks,
+		ChunkCount:   numEstimatedChunks,
 	}
 
 	var derivedKey []byte
@@ -110,7 +112,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		return nil, err
 	}
 
-	chunkTableSize := numExpectedChunks * format.EntrySize
+	chunkTableSize := numEstimatedChunks * format.EntrySize
 	if header.IsEncrypted {
 		chunkTableSize += 28 // AES-GCM overhead
 	}
@@ -118,6 +120,10 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	if _, err := outFile.Write(chunkTableSpace); err != nil {
 		return nil, err
 	}
+
+	// Remember the offset where the Delta Pool starts, so we can
+	// truncate and rewrite if the estimated sizes were wrong.
+	deltaPoolStartOffset := int64(len(headerBytes)) + int64(len(blockTableSpace)) + int64(len(chunkTableSpace))
 
 	// 3. Process Stream
 	hasher := sha256.New()
@@ -132,7 +138,13 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	var hitCount int
 
 	for {
-		n, errRead := inFile.Read(buf)
+		// Use io.ReadFull to guarantee complete 16MB block reads.
+		// Regular Read() can return partial reads, causing block boundary
+		// misalignment that corrupts the delta pool on decompression.
+		n, errRead := io.ReadFull(inFile, buf)
+		if errRead == io.ErrUnexpectedEOF {
+			errRead = nil // Partial read is OK for the last block
+		}
 		if n > 0 {
 			blockData := buf[:n]
 			hasher.Write(blockData)
@@ -239,10 +251,10 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		}
 	}
 
-	// 4. Finalize
+	// 4. Finalize — Update header with REAL chunk count (may differ from estimate)
+	actualChunkCount := uint32(len(finalEntries))
+	header.ChunkCount = actualChunkCount
 	copy(header.OriginalHash[:], hasher.Sum(nil))
-
-	outFile.Seek(0, 0)
 
 	tableData := format.SerializeChunkTable(finalEntries)
 	if header.IsEncrypted {
@@ -253,24 +265,56 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		tableData = encTable
 	}
 
-	// We can't use format.Writer.Write directly because we already streamed the DeltaPool.
-	// We just write the Metadata manually.
-	if _, err := outFile.Write(header.Serialize()); err != nil {
-		return nil, err
-	}
-
-	// Block Table
+	// Build actual block table bytes
 	blockTableRaw := make([]byte, len(blockTable)*4)
 	for i, size := range blockTable {
 		binary.LittleEndian.PutUint32(blockTableRaw[i*4:], size)
 	}
-	if _, err := outFile.Write(blockTableRaw); err != nil {
-		return nil, err
-	}
 
-	// Chunk Table
-	if _, err := outFile.Write(tableData); err != nil {
-		return nil, err
+	// Calculate the actual metadata size
+	actualHeaderSize := int64(len(header.Serialize()))
+	actualBlockTableSize := int64(len(blockTableRaw))
+	actualChunkTableSize := int64(len(tableData))
+	actualMetadataSize := actualHeaderSize + actualBlockTableSize + actualChunkTableSize
+
+	// If actual metadata size differs from what we reserved, we need to
+	// rewrite the entire file with correct offsets.
+	if actualMetadataSize != deltaPoolStartOffset {
+		// Read back all the delta pool data we already wrote
+		deltaPoolSize, _ := outFile.Seek(0, 2) // seek to end
+		deltaPoolSize -= deltaPoolStartOffset
+		deltaPoolData := make([]byte, deltaPoolSize)
+		outFile.Seek(deltaPoolStartOffset, 0)
+		io.ReadFull(outFile, deltaPoolData)
+
+		// Truncate and rewrite from the beginning
+		outFile.Truncate(actualMetadataSize + int64(len(deltaPoolData)))
+		outFile.Seek(0, 0)
+
+		if _, err := outFile.Write(header.Serialize()); err != nil {
+			return nil, err
+		}
+		if _, err := outFile.Write(blockTableRaw); err != nil {
+			return nil, err
+		}
+		if _, err := outFile.Write(tableData); err != nil {
+			return nil, err
+		}
+		if _, err := outFile.Write(deltaPoolData); err != nil {
+			return nil, err
+		}
+	} else {
+		// Metadata size matches estimate — just seek back and overwrite in place
+		outFile.Seek(0, 0)
+		if _, err := outFile.Write(header.Serialize()); err != nil {
+			return nil, err
+		}
+		if _, err := outFile.Write(blockTableRaw); err != nil {
+			return nil, err
+		}
+		if _, err := outFile.Write(tableData); err != nil {
+			return nil, err
+		}
 	}
 
 	packedInfo, _ := outFile.Stat()
@@ -279,6 +323,6 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		OriginalSize: originalSize,
 		PackedSize:   uint64(packedInfo.Size()),
 		Duration:     time.Since(start),
-		HitRate:      (float64(hitCount) / float64(numExpectedChunks)) * 100,
+		HitRate:      (float64(hitCount) / float64(actualChunkCount)) * 100,
 	}, nil
 }
