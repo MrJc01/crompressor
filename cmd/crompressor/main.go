@@ -25,12 +25,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/crom-project/crom/internal/network"
-	"github.com/crom-project/crom/internal/trainer"
-	"github.com/crom-project/crom/internal/vfs"
-	"github.com/crom-project/crom/pkg/cromlib"
-	"github.com/crom-project/crom/pkg/format"
-	cromsync "github.com/crom-project/crom/pkg/sync"
+	"github.com/MrJc01/crompressor/internal/network"
+	"github.com/MrJc01/crompressor/internal/trainer"
+	"github.com/MrJc01/crompressor/internal/vfs"
+	"github.com/MrJc01/crompressor/pkg/cromlib"
+	"github.com/MrJc01/crompressor/pkg/format"
+	cromsync "github.com/MrJc01/crompressor/pkg/sync"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
@@ -212,7 +212,7 @@ func shareCmd() *cobra.Command {
 
 func trainCmd() *cobra.Command {
 	var inputDir, outputPath string
-	var maxCodewords, concurrency int
+	var maxCodewords, concurrency, chunkSize int
 
 	cmd := &cobra.Command{
 		Use:   "train",
@@ -245,6 +245,9 @@ func trainCmd() *cobra.Command {
 			if concurrency > 0 {
 				opts.Concurrency = concurrency
 			}
+			if chunkSize > 0 {
+				opts.ChunkSize = chunkSize
+			}
 			opts.OnProgress = func(n int) {
 				bar.Add(n)
 			}
@@ -267,6 +270,7 @@ func trainCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&inputDir, "input", "i", "", "Diretório com os dados de treinamento")
 	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "Caminho do .cromdb gerado")
 	cmd.Flags().IntVarP(&maxCodewords, "size", "s", 8192, "Número máximo de padrões no codebook (Target)")
+	cmd.Flags().IntVarP(&chunkSize, "chunk-size", "k", 128, "Tamanho base dos chunks (granularidade)")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "Número de goroutines para processamento paralelo")
 
 	return cmd
@@ -274,7 +278,8 @@ func trainCmd() *cobra.Command {
 
 func packCmd() *cobra.Command {
 	var input, output, codebookPath string
-	var concurrency int
+	var concurrency, chunkSize int
+	var useCDC bool
 	var encryptionKey string
 
 	cmd := &cobra.Command{
@@ -311,6 +316,10 @@ func packCmd() *cobra.Command {
 			if concurrency > 0 {
 				opts.Concurrency = concurrency
 			}
+			if chunkSize > 0 {
+				opts.ChunkSize = chunkSize
+			}
+			opts.UseCDC = useCDC
 			if encryptionKey != "" {
 				opts.EncryptionKey = encryptionKey
 			}
@@ -338,6 +347,8 @@ func packCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Caminho do arquivo .crom de saída")
 	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Caminho do Codebook (.cromdb)")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "Número de goroutines para processamento paralelo")
+	cmd.Flags().IntVarP(&chunkSize, "chunk-size", "k", 128, "Tamanho base dos chunks (granularidade)")
+	cmd.Flags().BoolVar(&useCDC, "cdc", false, "Habilitar Content-Defined Chunking")
 	cmd.Flags().StringVar(&encryptionKey, "encrypt", "", "Chave/Senha para criptografia AES-256-GCM")
 
 	return cmd

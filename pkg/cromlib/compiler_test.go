@@ -11,32 +11,32 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/crom-project/crom/internal/chunker"
-	"github.com/crom-project/crom/internal/codebook"
+	"github.com/MrJc01/crompressor/internal/chunker"
+	"github.com/MrJc01/crompressor/internal/codebook"
 )
 
 // createTestCodebook generates a .cromdb file with patterns derived from the input data.
-// This simulates a real "train" step by extracting actual 128-byte chunks from the data.
-func createTestCodebook(t *testing.T, data []byte) string {
+// This simulates a real "train" step by extracting actual chunks from the data.
+func createTestCodebook(t *testing.T, data []byte, chunkSize int) string {
 	t.Helper()
 
 	dir := t.TempDir()
 	cbPath := filepath.Join(dir, "test.cromdb")
 
-	fc := chunker.NewFixedChunker(chunker.DefaultChunkSize)
+	fc := chunker.NewFixedChunker(chunkSize)
 	chunks := fc.Split(data)
 
 	// Collect unique patterns (up to 256 for tests)
 	seen := make(map[[32]byte]bool)
 	var patterns [][]byte
 	for _, c := range chunks {
-		if len(c.Data) != chunker.DefaultChunkSize {
+		if len(c.Data) != chunkSize {
 			continue // Skip partial chunks
 		}
 		hash := sha256.Sum256(c.Data)
 		if !seen[hash] {
 			seen[hash] = true
-			p := make([]byte, chunker.DefaultChunkSize)
+			p := make([]byte, chunkSize)
 			copy(p, c.Data)
 			patterns = append(patterns, p)
 			if len(patterns) >= 256 {
@@ -45,9 +45,8 @@ func createTestCodebook(t *testing.T, data []byte) string {
 		}
 	}
 
-	// If data is too small or uniform, add some random patterns
 	if len(patterns) == 0 {
-		p := make([]byte, chunker.DefaultChunkSize)
+		p := make([]byte, chunkSize)
 		patterns = append(patterns, p) // zero pattern
 	}
 
@@ -88,7 +87,7 @@ func writeCodebook(t *testing.T, path string, patterns [][]byte) {
 }
 
 // packUnpackRoundtrip is a helper that tests the full Pack → Unpack pipeline.
-func packUnpackRoundtrip(t *testing.T, data []byte, testName string) {
+func packUnpackRoundtrip(t *testing.T, data []byte, testName string, opts PackOptions) {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -100,11 +99,12 @@ func packUnpackRoundtrip(t *testing.T, data []byte, testName string) {
 		t.Fatalf("[%s] write input: %v", testName, err)
 	}
 
-	cbPath := createTestCodebook(t, data)
+	if opts.ChunkSize <= 0 {
+		opts.ChunkSize = chunker.DefaultChunkSize
+	}
+	cbPath := createTestCodebook(t, data, opts.ChunkSize)
 
 	// Pack
-	opts := DefaultPackOptions()
-	opts.Concurrency = 2
 	metrics, err := Pack(inputPath, cromPath, cbPath, opts)
 	if err != nil {
 		t.Fatalf("[%s] Pack failed: %v", testName, err)
@@ -148,7 +148,9 @@ func packUnpackRoundtrip(t *testing.T, data []byte, testName string) {
 func TestPackUnpack_SmallFile(t *testing.T) {
 	// 1KB of repetitive data — should compress well
 	data := bytes.Repeat([]byte("Hello, Crompressor! "), 52) // ~1040 bytes
-	packUnpackRoundtrip(t, data, "SmallFile_1KB")
+	opts := DefaultPackOptions()
+	opts.Concurrency = 2
+	packUnpackRoundtrip(t, data, "SmallFile_1KB", opts)
 }
 
 func TestPackUnpack_MediumFile(t *testing.T) {
@@ -167,14 +169,18 @@ func TestPackUnpack_MediumFile(t *testing.T) {
 			segment[j] = byte(patternID*13 + j%7)
 		}
 	}
-	packUnpackRoundtrip(t, data, "MediumFile_1MB")
+	opts := DefaultPackOptions()
+	opts.Concurrency = 2
+	packUnpackRoundtrip(t, data, "MediumFile_1MB", opts)
 }
 
 func TestPackUnpack_RandomData(t *testing.T) {
 	// 512KB of purely random data — worst case for compression
 	data := make([]byte, 512*1024)
 	rand.Read(data)
-	packUnpackRoundtrip(t, data, "RandomData_512KB")
+	opts := DefaultPackOptions()
+	opts.Concurrency = 2
+	packUnpackRoundtrip(t, data, "RandomData_512KB", opts)
 }
 
 func TestPackUnpack_RepetitiveData(t *testing.T) {
@@ -185,14 +191,18 @@ func TestPackUnpack_RepetitiveData(t *testing.T) {
 		pos := rng.Intn(len(data))
 		data[pos] = byte(rng.Intn(256))
 	}
-	packUnpackRoundtrip(t, data, "RepetitiveData_1MB")
+	opts := DefaultPackOptions()
+	opts.Concurrency = 2
+	packUnpackRoundtrip(t, data, "RepetitiveData_1MB", opts)
 }
 
 func TestPackUnpack_NonAligned128(t *testing.T) {
 	// Size that is NOT a multiple of 128 bytes
 	data := make([]byte, 1000) // 1000 = 7*128 + 104
 	rand.Read(data)
-	packUnpackRoundtrip(t, data, "NonAligned128_1000B")
+	opts := DefaultPackOptions()
+	opts.Concurrency = 2
+	packUnpackRoundtrip(t, data, "NonAligned128_1000B", opts)
 }
 
 func TestPackUnpack_NonAligned16MB(t *testing.T) {
@@ -220,7 +230,9 @@ func TestPackUnpack_NonAligned16MB(t *testing.T) {
 			data[i+j] ^= byte(rng.Intn(256))
 		}
 	}
-	packUnpackRoundtrip(t, data, "NonAligned16MB_17MB")
+	opts := DefaultPackOptions()
+	opts.Concurrency = 2
+	packUnpackRoundtrip(t, data, "NonAligned16MB_17MB", opts)
 }
 
 func TestPackUnpack_ChunkCountConsistency(t *testing.T) {
@@ -247,10 +259,10 @@ func TestPackUnpack_ChunkCountConsistency(t *testing.T) {
 			outputPath := filepath.Join(dir, "restored.bin")
 
 			os.WriteFile(inputPath, data, 0644)
-			cbPath := createTestCodebook(t, data)
-
 			opts := DefaultPackOptions()
 			opts.Concurrency = 1
+			cbPath := createTestCodebook(t, data, opts.ChunkSize)
+
 			_, err := Pack(inputPath, cromPath, cbPath, opts)
 			if err != nil {
 				t.Fatalf("Pack(%d bytes) failed: %v", size, err)
@@ -288,9 +300,9 @@ func TestPackUnpack_SHA256Integrity(t *testing.T) {
 	outputPath := filepath.Join(dir, "restored.bin")
 
 	os.WriteFile(inputPath, data, 0644)
-	cbPath := createTestCodebook(t, data)
-
 	opts := DefaultPackOptions()
+	cbPath := createTestCodebook(t, data, opts.ChunkSize)
+
 	_, err := Pack(inputPath, cromPath, cbPath, opts)
 	if err != nil {
 		t.Fatalf("Pack failed: %v", err)
@@ -321,6 +333,28 @@ func TestPackUnpack_SHA256Integrity(t *testing.T) {
 	}
 
 	t.Logf("✔ SHA-256 integrity verified: %x", origHash[:8])
+}
+
+func TestPackUnpack_CustomChunkSize(t *testing.T) {
+	// 512B dataset grouped in 64B chunks instead of 128B
+	data := make([]byte, 512)
+	for i := range data {
+		data[i] = byte(i % 17) // somewhat repetitive
+	}
+	opts := DefaultPackOptions()
+	opts.Concurrency = 1
+	opts.ChunkSize = 64
+	packUnpackRoundtrip(t, data, "CustomChunkSize_64B", opts)
+}
+
+func TestPackUnpack_CDC(t *testing.T) {
+	// Simple highly repetitive dataset to test CDC borders logic
+	data := bytes.Repeat([]byte("ABCDC"), 2000) // 10KB
+	opts := DefaultPackOptions()
+	opts.Concurrency = 1
+	opts.UseCDC = true
+	opts.ChunkSize = 64
+	packUnpackRoundtrip(t, data, "CDC_64B", opts)
 }
 
 func sizeLabel(size int) string {

@@ -10,18 +10,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/crom-project/crom/internal/chunker"
-	"github.com/crom-project/crom/internal/codebook"
-	"github.com/crom-project/crom/internal/crypto"
-	"github.com/crom-project/crom/internal/delta"
-	"github.com/crom-project/crom/internal/search"
-	"github.com/crom-project/crom/pkg/format"
+	"github.com/MrJc01/crompressor/internal/chunker"
+	"github.com/MrJc01/crompressor/internal/codebook"
+	"github.com/MrJc01/crompressor/internal/crypto"
+	"github.com/MrJc01/crompressor/internal/delta"
+	"github.com/MrJc01/crompressor/internal/search"
+	"github.com/MrJc01/crompressor/pkg/format"
 )
 
 // PackOptions defines the compiler settings.
 type PackOptions struct {
 	Concurrency   int
 	EncryptionKey string // Passphrase for AES-256-GCM. If empty, no encryption.
+	ChunkSize     int    // Size of the chunks (default 128)
+	UseCDC        bool   // If true, uses Content-Defined Chunking instead of FixedChunker
 	// Callback for progress bar integration, called with bytes processed
 	OnProgress func(bytesProcessed int)
 }
@@ -38,6 +40,8 @@ type Metrics struct {
 func DefaultPackOptions() PackOptions {
 	return PackOptions{
 		Concurrency: 4,
+		ChunkSize:   chunker.DefaultChunkSize,
+		UseCDC:      false,
 		OnProgress:  func(n int) {},
 	}
 }
@@ -73,7 +77,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	originalSize := uint64(info.Size())
 	// Pre-calculate an estimate for dummy space allocation.
 	// The REAL chunk count will be set after the processing loop.
-	numEstimatedChunks := uint32((originalSize + chunker.DefaultChunkSize - 1) / chunker.DefaultChunkSize)
+	numEstimatedChunks := uint32((originalSize + uint64(opts.ChunkSize) - 1) / uint64(opts.ChunkSize))
 
 	outFile, err := os.Create(outputPath)
 	if err != nil {
@@ -127,7 +131,13 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 
 	// 3. Process Stream
 	hasher := sha256.New()
-	fc := chunker.NewFixedChunker(chunker.DefaultChunkSize)
+	
+	var fc chunker.Chunker
+	if opts.UseCDC {
+		fc = chunker.NewCDCChunker(opts.ChunkSize)
+	} else {
+		fc = chunker.NewFixedChunker(opts.ChunkSize)
+	}
 
 	var finalEntries []format.ChunkEntry
 	var blockTable []uint32

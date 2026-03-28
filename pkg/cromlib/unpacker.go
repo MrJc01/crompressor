@@ -7,10 +7,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/crom-project/crom/internal/codebook"
-	"github.com/crom-project/crom/internal/crypto"
-	"github.com/crom-project/crom/internal/delta"
-	"github.com/crom-project/crom/pkg/format"
+	"github.com/MrJc01/crompressor/internal/codebook"
+	"github.com/MrJc01/crompressor/internal/crypto"
+	"github.com/MrJc01/crompressor/internal/delta"
+	"github.com/MrJc01/crompressor/pkg/format"
 )
 
 // UnpackOptions defines settings for decompression.

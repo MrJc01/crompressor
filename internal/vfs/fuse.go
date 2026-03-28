@@ -8,8 +8,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/crom-project/crom/internal/codebook"
-	"github.com/crom-project/crom/pkg/format"
+	"github.com/MrJc01/crompressor/internal/codebook"
+	"github.com/MrJc01/crompressor/pkg/format"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )

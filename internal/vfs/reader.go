@@ -5,11 +5,11 @@ import (
 	"io"
 	"sync"
 
-	"github.com/crom-project/crom/internal/chunker"
-	"github.com/crom-project/crom/internal/codebook"
-	"github.com/crom-project/crom/internal/crypto"
-	"github.com/crom-project/crom/internal/delta"
-	"github.com/crom-project/crom/pkg/format"
+	"github.com/MrJc01/crompressor/internal/chunker"
+	"github.com/MrJc01/crompressor/internal/codebook"
+	"github.com/MrJc01/crompressor/internal/crypto"
+	"github.com/MrJc01/crompressor/internal/delta"
+	"github.com/MrJc01/crompressor/pkg/format"
 )
 
 // RandomReader provides an io.ReaderAt interface over a .crom file.

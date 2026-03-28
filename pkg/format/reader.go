@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/crom-project/crom/internal/crypto"
+	"github.com/MrJc01/crompressor/internal/crypto"
 )
 
 // Reader reads and parses a .crom file sequentially.

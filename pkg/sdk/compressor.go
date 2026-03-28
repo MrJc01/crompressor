@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/crom-project/crom/internal/trainer"
-	"github.com/crom-project/crom/pkg/cromlib"
+	"github.com/MrJc01/crompressor/internal/trainer"
+	"github.com/MrJc01/crompressor/pkg/cromlib"
 )
 
 // TrainCommand holds arguments for training a codebook.

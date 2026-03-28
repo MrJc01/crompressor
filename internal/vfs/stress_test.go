@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crom-project/crom/internal/codebook"
-	"github.com/crom-project/crom/pkg/cromlib"
-	"github.com/crom-project/crom/pkg/format"
+	"github.com/MrJc01/crompressor/internal/codebook"
+	"github.com/MrJc01/crompressor/pkg/cromlib"
+	"github.com/MrJc01/crompressor/pkg/format"
 )
 
 // TestRandomAccessStress packs synthetic data, then performs hundreds of

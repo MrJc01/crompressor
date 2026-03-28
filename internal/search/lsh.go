@@ -3,7 +3,7 @@ package search
 import (
 	"errors"
 
-	"github.com/crom-project/crom/internal/codebook"
+	"github.com/MrJc01/crompressor/internal/codebook"
 )
 
 // LSHSearcher implements Locality Sensitive Hashing (LSH) for sub-linear search.

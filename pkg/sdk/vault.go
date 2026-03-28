@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/crom-project/crom/internal/vfs"
+	"github.com/MrJc01/crompressor/internal/vfs"
 )
 
 type DefaultVault struct {

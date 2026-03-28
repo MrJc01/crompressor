@@ -12,7 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	cromsync "github.com/crom-project/crom/pkg/sync"
+	cromsync "github.com/MrJc01/crompressor/pkg/sync"
 )
 
 const (

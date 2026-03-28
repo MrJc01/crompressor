@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crom-project/crom/internal/codebook"
-	"github.com/crom-project/crom/pkg/cromlib"
+	"github.com/MrJc01/crompressor/internal/codebook"
+	"github.com/MrJc01/crompressor/pkg/cromlib"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 )
@@ -121,6 +121,10 @@ func TestTwoNodeSync(t *testing.T) {
 	// Also verify that codebook open doesn't panic on the new nodes
 	cb, _ := codebook.Open(codebookPath)
 	cb.Close()
+
+	// Wait for background connection streams to flush before teardown 
+	// to prevent auth EOF panics under the -race detector schedule
+	time.Sleep(500 * time.Millisecond)
 
 	fmt.Println("✔ Integration test passed successfully!")
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/crom-project/crom/internal/crypto"
+	"github.com/MrJc01/crompressor/internal/crypto"
 )
 
 // Crypto exposes AES-256-GCM encryption to the GUI and external consumers.

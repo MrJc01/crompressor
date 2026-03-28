@@ -18,7 +18,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/crom-project/crom/internal/codebook"
+	"github.com/MrJc01/crompressor/internal/codebook"
 )
 
 func createTestCodebook(t *testing.T, patterns [][]byte) string {

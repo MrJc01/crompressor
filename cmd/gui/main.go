@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/crom-project/crom/pkg/sdk"
+	"github.com/MrJc01/crompressor/pkg/sdk"
 	"github.com/gorilla/websocket"
 	"github.com/zserge/lorca"
 )

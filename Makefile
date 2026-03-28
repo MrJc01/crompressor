@@ -5,13 +5,15 @@ build:
 	go build -o bin/crompressor ./cmd/crompressor
 
 test:
-	go test -v -race ./...
+	@mkdir -p .go-tmp
+	GOTMPDIR="$(shell pwd)/.go-tmp" go test -v -race ./...
 
 bench:
-	go test -bench=. -benchmem -benchtime=10s ./...
+	@mkdir -p .go-tmp
+	GOTMPDIR="$(shell pwd)/.go-tmp" go test -bench=. -benchmem -benchtime=10s ./...
 
 clean:
-	rm -rf bin/
+	rm -rf bin/ .go-tmp/
 
 lint:
 	go vet ./...
@@ -46,8 +48,9 @@ stress: build gen-codebook
 
 searchbench:
 	@echo "=== Benchmark A/B: Linear vs LSH ==="
-	go test -bench=BenchmarkLinearSearcher -benchmem -benchtime=3s ./internal/search/
-	go test -bench=BenchmarkLSHSearcher -benchmem -benchtime=3s ./internal/search/
+	@mkdir -p .go-tmp
+	GOTMPDIR="$(shell pwd)/.go-tmp" go test -bench=BenchmarkLinearSearcher -benchmem -benchtime=3s ./internal/search/
+	GOTMPDIR="$(shell pwd)/.go-tmp" go test -bench=BenchmarkLSHSearcher -benchmem -benchtime=3s ./internal/search/
 
 gen-realworld:
 	@echo "=== Gerando Dados Reais (Go, Logs, Config, Binários) ==="
@@ -68,7 +71,8 @@ demo-real: build
 
 stress-vfs: build gen-codebook
 	@echo "=== Stress Test: Random Access via RandomReader ==="
-	go test -v -run TestRandomAccess -count=1 ./internal/vfs/
+	@mkdir -p .go-tmp
+	GOTMPDIR="$(shell pwd)/.go-tmp" go test -v -run TestRandomAccess -count=1 ./internal/vfs/
 
 run-node:
 	@echo '--- Iniciando Daemon P2P ---'

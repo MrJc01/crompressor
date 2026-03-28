@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/crom-project/crom/internal/chunker"
+	"github.com/MrJc01/crompressor/internal/chunker"
 )
 
 // TrainOptions configures the training process.
@@ -18,6 +18,7 @@ type TrainOptions struct {
 	MaxCodewords int // Number of codewords in the final codebook
 	MaxPerBucket int // Max codewords per LSH bucket (diversity control)
 	Concurrency  int
+	ChunkSize    int // Size of chunks used for pattern extraction
 	OnProgress   func(bytesProcessed int)
 }
 
@@ -36,6 +37,7 @@ func DefaultTrainOptions() TrainOptions {
 		MaxCodewords: 8192,
 		MaxPerBucket: 64,
 		Concurrency:  4,
+		ChunkSize:    chunker.DefaultChunkSize,
 		OnProgress:   func(n int) {},
 	}
 }
@@ -53,6 +55,9 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 	}
 	if opts.Concurrency <= 0 {
 		opts.Concurrency = 4
+	}
+	if opts.ChunkSize <= 0 {
+		opts.ChunkSize = chunker.DefaultChunkSize
 	}
 
 	// Phase 1: Discover all files
@@ -76,7 +81,7 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 
 	// Phase 2: Concurrent chunking and frequency counting
 	ft := NewFrequencyTable()
-	fc := chunker.NewFixedChunker(chunker.DefaultChunkSize)
+	fc := chunker.NewFixedChunker(opts.ChunkSize)
 
 	fileChan := make(chan string, len(files))
 	for _, f := range files {
@@ -106,7 +111,7 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 						chunks := fc.Split(buf[:n])
 						for _, c := range chunks {
 							// Only record full-size chunks for consistent codebook entries
-							if uint64(len(c.Data)) == chunker.DefaultChunkSize {
+							if len(c.Data) == opts.ChunkSize {
 								ft.Record(c.Data)
 							}
 						}

@@ -8,7 +8,7 @@ import (
 
 func TestCDC_Split_Basic(t *testing.T) {
 	data := []byte("Hello, Content-Defined Chunking World! Let's see some boundaries.")
-	c := NewCDCChunker()
+	c := NewCDCChunker(128)
 	chunks := c.Split(data)
 
 	if len(chunks) == 0 {
@@ -38,7 +38,7 @@ func TestCDC_ShiftingResistance(t *testing.T) {
 	shifted[0] = 0xAA // Inserted byte
 	copy(shifted[1:], orig)
 
-	cdc := NewCDCChunker()
+	cdc := NewCDCChunker(128)
 	chunksA := cdc.Split(orig)
 	chunksB := cdc.Split(shifted)
 

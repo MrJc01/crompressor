@@ -7,7 +7,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/crom-project/crom/internal/codebook"
+	"github.com/MrJc01/crompressor/internal/codebook"
 )
 
 // WriteCodebook generates a .cromdb file from the selected patterns.

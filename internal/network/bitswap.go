@@ -8,11 +8,11 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/network"
 
-	"github.com/crom-project/crom/internal/codebook"
-	"github.com/crom-project/crom/internal/crypto"
-	"github.com/crom-project/crom/internal/delta"
-	"github.com/crom-project/crom/pkg/format"
-	cromsync "github.com/crom-project/crom/pkg/sync"
+	"github.com/MrJc01/crompressor/internal/codebook"
+	"github.com/MrJc01/crompressor/internal/crypto"
+	"github.com/MrJc01/crompressor/internal/delta"
+	"github.com/MrJc01/crompressor/pkg/format"
+	cromsync "github.com/MrJc01/crompressor/pkg/sync"
 )
 
 // StreamChunks extracts the uncompressed XOR delta for each requested index

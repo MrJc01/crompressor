@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/crom-project/crom/internal/codebook"
+	"github.com/MrJc01/crompressor/internal/codebook"
 )
 
 func createLSHCodebook(t *testing.T, patterns [][]byte) string {

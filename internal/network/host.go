@@ -21,7 +21,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	libquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 
-	"github.com/crom-project/crom/internal/codebook"
+	"github.com/MrJc01/crompressor/internal/codebook"
 )
 
 // CromNode is the main P2P node for the CROM network.

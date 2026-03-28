@@ -5,15 +5,6 @@ import (
 )
 
 const (
-	// CDCTargetSize is the ideal chunk size we aim for (matches codebook).
-	CDCTargetSize = 128
-	
-	// CDCMinSize prevents tiny fragmented chunks.
-	CDCMinSize = 32
-	
-	// CDCMaxSize prevents infinitely large chunks if no boundary is found.
-	CDCMaxSize = 256
-	
 	// CDCWindowSize corresponds to the rolling hash window.
 	CDCWindowSize = 8
 )
@@ -33,11 +24,19 @@ func init() {
 }
 
 // CDCChunker implements Content-Defined Chunking using a simple rolling hash.
-// It finds boundaries where `(hash % TargetSize) == 0`.
-type CDCChunker struct{}
+// It finds boundaries where `(hash % targetSize) == 0`.
+type CDCChunker struct{
+	targetSize int
+	minSize    int
+	maxSize    int
+}
 
-func NewCDCChunker() *CDCChunker {
-	return &CDCChunker{}
+func NewCDCChunker(targetSize int) *CDCChunker {
+	return &CDCChunker{
+		targetSize: targetSize,
+		minSize:    targetSize / 4,
+		maxSize:    targetSize * 2,
+	}
 }
 
 // Split divides the data into chunks based on data content to resist byte-shifting.
@@ -50,7 +49,7 @@ func (c *CDCChunker) Split(data []byte) []Chunk {
 	n := len(data)
 
 	// If data is smaller than min size, just return it as a single chunk
-	if n <= CDCMinSize {
+	if n <= c.minSize {
 		return []Chunk{makeChunk(data, 0, n)}
 	}
 
@@ -64,7 +63,7 @@ func (c *CDCChunker) Split(data []byte) []Chunk {
 		chunkLen := offset - start
 
 		// Force boundary if we reach MaxSize
-		if chunkLen >= CDCMaxSize {
+		if chunkLen >= c.maxSize {
 			chunks = append(chunks, makeChunk(data, start, offset))
 			start = offset
 			rollHash = 0
@@ -80,8 +79,8 @@ func (c *CDCChunker) Split(data []byte) []Chunk {
 		}
 
 		// Check boundary condition: only if we passed MinSize
-		if chunkLen >= CDCMinSize && offset >= start+CDCWindowSize {
-			if rollHash%CDCTargetSize == 0 {
+		if chunkLen >= c.minSize && offset >= start+CDCWindowSize {
+			if rollHash%uint64(c.targetSize) == 0 {
 				chunks = append(chunks, makeChunk(data, start, offset+1))
 				start = offset + 1
 				rollHash = 0

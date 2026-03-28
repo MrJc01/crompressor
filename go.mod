@@ -1,4 +1,4 @@
-module github.com/crom-project/crom
+module github.com/MrJc01/crompressor
 
 go 1.25.7
 
