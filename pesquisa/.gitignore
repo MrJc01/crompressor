@@ -1,0 +1,40 @@
+# 🧱 Crompressor: Pesquisa - GitIgnore
+# Bloquear tudo por padrão e habilitar apenas o necessário (White-listing)
+
+# 🚫 Ignorar tudo recursivamente
+*
+
+# ✅ Permitir arquivos de configuração e scripts
+!.gitignore
+!*.sh
+!*.md
+!scripts/
+
+# ✅ Permitir subpastas de teste (apenas a estrutura e arquivos MD)
+!01-logs_redundancia/
+!02-delta_sync_cdc/
+!03-vfs_mount_perf/
+!04-p2p_soberania/
+!05-tco_storage_frio/
+
+# 🚫 Ignorar dados binários e logs dentro das pastas de teste
+01-logs_redundancia/*
+!01-logs_redundancia/*.md
+02-delta_sync_cdc/*
+!02-delta_sync_cdc/*.md
+03-vfs_mount_perf/*
+!03-vfs_mount_perf/*.md
+04-p2p_soberania/*
+!04-p2p_soberania/*.md
+05-tco_storage_frio/*
+!05-tco_storage_frio/*.md
+
+# 🚫 Ignorar datasets reais (apenas README nestas pastas)
+datasets/*
+!datasets/*.md
+
+# Temporários e Dumps
+*.log
+*.tmp
+*.dat
+.DS_Store
