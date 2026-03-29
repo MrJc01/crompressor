@@ -389,7 +389,11 @@ func TestUnpack_CorruptBlock(t *testing.T) {
 	tableSize := int(h.ChunkCount) * format.EntrySize
 	if h.IsEncrypted { tableSize += 28 }
 	hSize := format.HeaderSizeV2
-	if h.Version == format.Version4 { hSize = format.HeaderSizeV4 }
+	if h.Version == format.Version4 { 
+		hSize = format.HeaderSizeV4 
+	} else if h.Version == format.Version5 {
+		hSize = format.HeaderSizeV5
+	}
 	baseOffset := hSize + 4 /* block table len 1 */ + tableSize
 	
 	if baseOffset < len(cromData) {

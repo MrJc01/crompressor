@@ -64,6 +64,8 @@ func NewRandomReader(f io.ReaderAt, fileSize int64, header *format.Header, block
 	hSize := format.HeaderSizeV2
 	if header.Version == format.Version4 {
 		hSize = format.HeaderSizeV4
+	} else if header.Version == format.Version5 {
+		hSize = format.HeaderSizeV5
 	}
 
 	baseOffset := int64(hSize + len(blockTable)*4 + tableSize)
