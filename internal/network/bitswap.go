@@ -97,13 +97,12 @@ func StreamChunks(localPath, codebookPath, encryptionKey string, indices []uint3
 	return nil
 }
 
-// ReceiveChunks reads streamed deltas, buffers them, and builds a robust V2 .crom file.
-func ReceiveChunks(destPath string, manifest *cromsync.ChunkManifest, totalChunks int, s network.Stream) error {
-	// 1. Read all streamed residuals into memory (for this phase, we assume all are received)
-	// Note: In a true CAS system, we would ask multiple peers for different pieces.
+// ReceiveChunks reads streamed deltas, buffers them, and builds a robust V2 .crom file leveraging existing chunks.
+func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkManifest, missingIndices []uint32, s network.Stream, codebookPath string, encryptionKey string) error {
 	residuals := make(map[uint32][]byte)
 
-	for i := 0; i < totalChunks; i++ {
+	// 1. Read the missing chunks from network
+	for i := 0; i < len(missingIndices); i++ {
 		header := make([]byte, 8)
 		if _, err := io.ReadFull(s, header); err != nil {
 			if err == io.EOF {
@@ -125,12 +124,38 @@ func ReceiveChunks(destPath string, manifest *cromsync.ChunkManifest, totalChunk
 		residuals[idx] = residual
 	}
 
-	fmt.Printf("[Sync] Bitswap completo. %d/%d chunks recebidos. Repackaging...\n", len(residuals), totalChunks)
+	fmt.Printf("[Sync] Bitswap completo. %d chunks recebidos. Repackaging...\n", len(residuals))
 
-	// 2. Rebuild the .crom file from the manifest and the received residuals
-	// We use the same format V2 structure: group every 8192 chunks into a block.
+	// 2. Read existing residuals if we are patching instead of starting fresh
+	var localUncompressedPool []byte
+	var localEntries []format.ChunkEntry
+	if _, err := os.Stat(outPath); err == nil {
+		f, err := os.Open(outPath)
+		if err == nil {
+			reader := format.NewReader(f)
+			lHeader, lBlockTable, lEnts, rStream, err := reader.ReadStream(encryptionKey)
+			if err == nil {
+				localEntries = lEnts
+				var derivedKey []byte
+				if lHeader.IsEncrypted {
+					derivedKey = crypto.DeriveKey([]byte(encryptionKey), lHeader.Salt[:])
+				}
+				for _, blockSize := range lBlockTable {
+					blockData := make([]byte, blockSize)
+					io.ReadFull(rStream, blockData)
+					if lHeader.IsEncrypted {
+						blockData, _ = crypto.Decrypt(derivedKey, blockData)
+					}
+					decompressed, _ := delta.DecompressPool(blockData)
+					localUncompressedPool = append(localUncompressedPool, decompressed...)
+				}
+			}
+			f.Close()
+		}
+	}
 
-	outFile, err := os.Create(destPath)
+	// 3. Rebuild the .crom file from the manifest and the received residuals
+	outFile, err := os.Create(tempPath)
 	if err != nil {
 		return err
 	}
@@ -140,7 +165,7 @@ func ReceiveChunks(destPath string, manifest *cromsync.ChunkManifest, totalChunk
 		Version:      format.Version2,
 		OriginalSize: manifest.OriginalSize,
 		ChunkCount:   manifest.ChunkCount,
-		IsEncrypted:  false, // We rebuild it unencrypted for simplicity in P2P receiver unless requested
+		IsEncrypted:  false,
 	}
 	copy(fileHeader.OriginalHash[:], manifest.OriginalHash[:])
 
@@ -152,18 +177,12 @@ func ReceiveChunks(destPath string, manifest *cromsync.ChunkManifest, totalChunk
 	numBlocks := fileHeader.NumBlocks()
 	blockTable := make([]uint32, 0, numBlocks)
 
-	// Dummy write for block table and chunk table
 	blockTableSpace := make([]byte, numBlocks*4)
-	if _, err := outFile.Write(blockTableSpace); err != nil {
-		return err
-	}
+	outFile.Write(blockTableSpace)
 
 	chunkTableSpace := make([]byte, manifest.ChunkCount*format.EntrySize)
-	if _, err := outFile.Write(chunkTableSpace); err != nil {
-		return err
-	}
+	outFile.Write(chunkTableSpace)
 
-	// Write blocks
 	finalEntries := make([]format.ChunkEntry, manifest.ChunkCount)
 	currentOffset := uint64(0)
 
@@ -179,8 +198,20 @@ func ReceiveChunks(destPath string, manifest *cromsync.ChunkManifest, totalChunk
 		for idx := startIdx; idx < endIdx; idx++ {
 			res, ok := residuals[idx]
 			if !ok {
-				// We don't have this chunk (sync failed)
-				return fmt.Errorf("bitswap: missing chunk %d for reconstruction", idx)
+				// Try fetching from local file
+				foundLocal := false
+				if idx < uint32(len(localEntries)) {
+					le := localEntries[idx]
+					eStart := le.DeltaOffset
+					eEnd := eStart + uint64(le.DeltaSize)
+					if eEnd <= uint64(len(localUncompressedPool)) {
+						res = localUncompressedPool[eStart:eEnd]
+						foundLocal = true
+					}
+				}
+				if !foundLocal {
+					return fmt.Errorf("bitswap: missing chunk %d for reconstruction", idx)
+				}
 			}
 
 			finalEntries[idx] = format.ChunkEntry{
@@ -194,38 +225,24 @@ func ReceiveChunks(destPath string, manifest *cromsync.ChunkManifest, totalChunk
 			currentOffset += uint64(len(res))
 		}
 
-		// Compress block
 		compBlock, err := delta.CompressPool(blockPlainDeltas)
 		if err != nil {
 			return fmt.Errorf("bitswap: repack compress block: %w", err)
 		}
 
 		blockTable = append(blockTable, uint32(len(compBlock)))
-
-		if _, err := outFile.Write(compBlock); err != nil {
-			return err
-		}
+		outFile.Write(compBlock)
 	}
 
-	// Rewrite Metadata
 	outFile.Seek(0, 0)
-
-	if _, err := outFile.Write(fileHeader.Serialize()); err != nil {
-		return err
-	}
+	outFile.Write(fileHeader.Serialize())
 
 	blockTableRaw := make([]byte, len(blockTable)*4)
 	for i, size := range blockTable {
 		binary.LittleEndian.PutUint32(blockTableRaw[i*4:], size)
 	}
-	if _, err := outFile.Write(blockTableRaw); err != nil {
-		return err
-	}
-
-	tableData := format.SerializeChunkTable(finalEntries)
-	if _, err := outFile.Write(tableData); err != nil {
-		return err
-	}
+	outFile.Write(blockTableRaw)
+	outFile.Write(format.SerializeChunkTable(finalEntries))
 
 	return nil
 }

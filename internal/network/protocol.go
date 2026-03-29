@@ -1,6 +1,7 @@
 package network
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 
+	"github.com/MrJc01/crompressor/internal/codebook"
 	cromsync "github.com/MrJc01/crompressor/pkg/sync"
 )
 
@@ -22,11 +24,14 @@ const (
 
 // Message Types
 const (
-	MsgSyncReq   byte = 0x01 // Request a manifest for a specific original file hash (or filename)
-	MsgManifest  byte = 0x02 // The serialized ChunkManifest
-	MsgDiffReq   byte = 0x03 // Request missing chunks (payload is array of indices)
-	MsgChunkData byte = 0x04 // Raw delta payload
-	MsgError     byte = 0xFF // Error message
+	MsgSyncReq      byte = 0x01 // Request a manifest for a specific original file hash (or filename)
+	MsgManifest     byte = 0x02 // The serialized ChunkManifest
+	MsgDiffReq      byte = 0x03 // Request missing chunks (payload is array of indices)
+	MsgChunkData    byte = 0x04 // Raw delta payload
+	MsgCodebookHash byte = 0x05 // 32-byte SHA-256 BuildHash of the codebook
+	MsgCodebookReq  byte = 0x06 // Request the full .cromdb binary
+	MsgCodebookData byte = 0x07 // Response: full .cromdb binary
+	MsgError        byte = 0xFF // Error message
 )
 
 // SyncProtocol handles manifest exchange and chunk transfers.
@@ -75,11 +80,16 @@ func (p *SyncProtocol) handleStream(s network.Stream) {
 			p.handleSyncReq(s, filename)
 
 		case MsgDiffReq:
-			// The payload is a json array of missing manifest entries or indices.
-			// For simplicity, we implement bitswap directly per chunk in the bitswap module.
-			// However, it's efficient to stream it here.
 			fmt.Printf("[Sync] Peer %s solicitou chunks do arquivo\n", s.Conn().RemotePeer())
 			p.handleDiffReq(s, payload)
+
+		case MsgCodebookHash:
+			fmt.Printf("[Sync] Peer %s enviou hash do codebook\n", s.Conn().RemotePeer())
+			p.handleCodebookHash(s, payload)
+
+		case MsgCodebookReq:
+			fmt.Printf("[Sync] Peer %s requisitou codebook binário\n", s.Conn().RemotePeer())
+			p.handleCodebookReq(s)
 
 		default:
 			fmt.Printf("[Sync] Mensagem desconhecida de %s: 0x%02x\n", s.Conn().RemotePeer(), msgType[0])
@@ -157,6 +167,8 @@ func (p *SyncProtocol) handleDiffReq(s network.Stream, payload []byte) {
 }
 
 // RequestSync is called proactively by a node to download a file from a remote peer.
+// Flow:
+// 0. Codebook Handshake (hash exchange, download if mismatch)
 // 1. Sends SYNC_REQ
 // 2. Receives MANIFEST
 // 3. Diff against local (if file exists) or request all chunks
@@ -168,6 +180,56 @@ func (p *SyncProtocol) RequestSync(ctx context.Context, pid peer.ID, filename st
 		return fmt.Errorf("sync: open stream: %w", err)
 	}
 	defer s.Close()
+
+	// 0. Codebook Handshake
+	if err := sendMsg(s, MsgCodebookHash, p.node.CodebookHash[:]); err != nil {
+		return fmt.Errorf("sync: enviar codebook hash: %w", err)
+	}
+
+	hashResp, hashPayload, err := readMsg(s)
+	if err != nil {
+		return fmt.Errorf("sync: ler resposta codebook hash: %w", err)
+	}
+
+	if hashResp == MsgError {
+		return fmt.Errorf("sync: codebook handshake error: %s", string(hashPayload))
+	}
+
+	if hashResp == MsgCodebookHash {
+		var remoteHash [32]byte
+		copy(remoteHash[:], hashPayload)
+
+		if !bytes.Equal(remoteHash[:], p.node.CodebookHash[:]) {
+			fmt.Printf("[Sync] Codebook mismatch! Solicitando .cromdb do peer...\n")
+			if err := sendMsg(s, MsgCodebookReq, nil); err != nil {
+				return fmt.Errorf("sync: request codebook: %w", err)
+			}
+
+			cbResp, cbPayload, err := readMsg(s)
+			if err != nil {
+				return fmt.Errorf("sync: ler codebook data: %w", err)
+			}
+			if cbResp != MsgCodebookData {
+				return fmt.Errorf("sync: esperava CODEBOOK_DATA (0x07), recebeu 0x%02x", cbResp)
+			}
+
+			remoteCbPath := filepath.Join(p.node.DataDir, "remote_peer.cromdb")
+			if err := os.WriteFile(remoteCbPath, cbPayload, 0644); err != nil {
+				return fmt.Errorf("sync: salvar codebook remoto: %w", err)
+			}
+
+			// Update node to use the remote codebook for this sync
+			p.node.CodebookPath = remoteCbPath
+			newCb, err := codebook.Open(remoteCbPath)
+			if err == nil {
+				p.node.CodebookHash = newCb.BuildHash()
+				newCb.Close()
+			}
+			fmt.Printf("[Sync] ✔ Codebook remoto salvo em %s\n", remoteCbPath)
+		} else {
+			fmt.Printf("[Sync] ✔ Codebooks idênticos. Prosseguindo com sync.\n")
+		}
+	}
 
 	// 1. Send Request
 	if err := sendMsg(s, MsgSyncReq, []byte(filename)); err != nil {
@@ -196,11 +258,50 @@ func (p *SyncProtocol) RequestSync(ctx context.Context, pid peer.ID, filename st
 	fmt.Printf("[Sync] Recebido manifesto para '%s' (%d chunks totais)\n", filename, remoteManifest.ChunkCount)
 
 	// 3. Compare with local (if any)
-	// For this phase, we assume the requester does NOT have the file at all.
-	// We'll request ALL chunks.
-	missingIndices := make([]uint32, remoteManifest.ChunkCount)
-	for i := uint32(0); i < remoteManifest.ChunkCount; i++ {
-		missingIndices[i] = i
+	destPath := filepath.Join(p.node.DataDir, filename)
+	if !strings.HasSuffix(destPath, ".crom") {
+		destPath += ".crom"
+	}
+
+	var missingIndices []uint32
+
+	if _, err := os.Stat(destPath); err == nil {
+		fmt.Printf("[Sync] Arquivo local encontrado. Analisando delta...\n")
+		localManifest, err := cromsync.GenerateManifest(destPath, p.node.CodebookPath, p.node.EncKey)
+		if err != nil {
+			fmt.Printf("[Sync] Aviso: Erro ao ler manifesto local (%v). Baixando tudo.\n", err)
+			for i := uint32(0); i < remoteManifest.ChunkCount; i++ {
+				missingIndices = append(missingIndices, i)
+			}
+		} else {
+			diffRes := cromsync.Diff(localManifest, remoteManifest)
+			if len(diffRes.Missing) == 0 {
+				fmt.Printf("[Sync] ✔ Arquivo local já está atualizado (0 chunks faltando).\n")
+				return nil
+			}
+
+			type chunkKey struct{ CodebookID, DeltaHash uint64 }
+			missingSet := make(map[chunkKey]struct{}, len(diffRes.Missing))
+			for _, e := range diffRes.Missing {
+				missingSet[chunkKey{e.CodebookID, e.DeltaHash}] = struct{}{}
+			}
+
+			for i, e := range remoteManifest.Entries {
+				if _, ok := missingSet[chunkKey{e.CodebookID, e.DeltaHash}]; ok {
+					missingIndices = append(missingIndices, uint32(i))
+				}
+			}
+			fmt.Printf("[Sync] Diferença lógica detectada: %d chunks faltando.\n", len(missingIndices))
+		}
+	} else {
+		missingIndices = make([]uint32, remoteManifest.ChunkCount)
+		for i := uint32(0); i < remoteManifest.ChunkCount; i++ {
+			missingIndices[i] = i
+		}
+	}
+
+	if len(missingIndices) == 0 {
+		return nil
 	}
 
 	// 4. Send Diff Request
@@ -221,19 +322,39 @@ func (p *SyncProtocol) RequestSync(ctx context.Context, pid peer.ID, filename st
 	}
 
 	// 5. Receive Chunks and Rebuild .crom
-	destPath := filepath.Join(p.node.DataDir, filename)
-	if !strings.HasSuffix(destPath, ".crom") {
-		destPath += ".crom"
-	}
-
-	fmt.Printf("[Sync] Iniciando bitswap de %d chunks...\n", len(missingIndices))
-	err = ReceiveChunks(destPath, remoteManifest, int(remoteManifest.ChunkCount), s)
+	fmt.Printf("[Sync] Iniciando bitswap reverso de %d chunks faltantes...\n", len(missingIndices))
+	tempPath := destPath + ".tmp"
+	err = ReceiveChunks(tempPath, destPath, remoteManifest, missingIndices, s, p.node.CodebookPath, p.node.EncKey)
 	if err != nil {
-		return fmt.Errorf("sync: bitswap: %w", err)
+		os.Remove(tempPath)
+		return fmt.Errorf("sync: bitswap merge error: %w", err)
 	}
 
-	fmt.Printf("[Sync] ✔ Download de '%s' finalizado. File salvo em %s\n", filename, destPath)
+	// Replace old file with new merged file
+	os.Remove(destPath)
+	os.Rename(tempPath, destPath)
+
+	fmt.Printf("[Sync] ✔ Sincronismo Delta P2P de '%s' finalizado com sucesso.\n", filename)
 	return nil
+}
+
+// --- Codebook Sharing Handlers ---
+
+// handleCodebookHash responds with our own codebook hash for comparison.
+func (p *SyncProtocol) handleCodebookHash(s network.Stream, payload []byte) {
+	// Reply with our own hash so the requester can compare
+	sendMsg(s, MsgCodebookHash, p.node.CodebookHash[:])
+}
+
+// handleCodebookReq sends the full .cromdb binary to the requesting peer.
+func (p *SyncProtocol) handleCodebookReq(s network.Stream) {
+	data, err := os.ReadFile(p.node.CodebookPath)
+	if err != nil {
+		sendError(s, "Erro ao ler codebook: "+err.Error())
+		return
+	}
+	fmt.Printf("[Sync] Enviando codebook binário (%d bytes)\n", len(data))
+	sendMsg(s, MsgCodebookData, data)
 }
 
 // --- Wire Format Helpers ---

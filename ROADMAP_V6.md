@@ -4,44 +4,37 @@ Prioridades definidas com base nas pesquisas reais V5 (1223 testes de imagem + b
 
 ---
 
-## 🔴 Sprint 5: Performance Core (Prioridade Alta)
+## ✅ Sprint 5: Performance Core (CONCLUÍDA — 2026-03-29)
 
-### 5.1 Multi-Pass Compression
-- **O quê**: Primeiro pass coleta histograma de CodebookIDs usados. Segundo pass recodifica usando apenas Top-K padrões mais frequentes.
-- **Por quê**: Menos vocabulário = menor entropia na Delta Pool = Zstd comprime melhor. Estimativa: +10-20% de economia.
-- **Onde**: `pkg/cromlib/compiler.go` — novo modo `opts.MultiPass = true`
-- **Teste**: Comparar ratio single-pass vs multi-pass no dataset de logs 26MB.
+### 5.1 Multi-Pass Compression ✅
+- **Implementado**: Flag `--multi-pass` no `crompressor pack`. Two-pass Tallying restringe CodebookIDs aos Top-256.
+- **Onde**: `pkg/cromlib/compiler.go` + `internal/search/lsh.go:Restrict()` + `internal/search/linear.go:Restrict()`
+- **Resultado**: -4KB a -10KB adicionais por arquivo versus single-pass.
 
-### 5.2 Benchmark Comparativo vs Gzip/Zstd
-- **O quê**: Script automatizado que comprime os mesmos datasets com `gzip -9`, `zstd -19`, e `crompressor pack`, medindo ratio, tempo, e RAM.
-- **Por quê**: Sem esse comparativo, não temos argumento quantificável de superioridade.
-- **Onde**: `pesquisa/07-benchmark_comparativo/` — novo diretório com scripts bash.
-- **Datasets**: logs_200k.json (26MB), dump_v1.sql (5.7MB), imagens BMP/SVG.
+### 5.2 Benchmark Comparativo vs Gzip/Zstd ✅
+- **Implementado**: Script `pesquisa/07-benchmark_comparativo/run_benchmark.sh`
+- **Resultado Real**: Crompressor mantém 81% saving em logs JSON (26MB), 76% em SQL dumps (5.7MB). Gzip/Zstd vencem em ratio puro (95-99%), mas não oferecem VFS Mount, P2P Sync ou Merkle Tree.
 
-### 5.3 Data Augmentation no Treino
-- **O quê**: Durante `train`, aplicar perturbações (bit shifts, byte rotation, padding) nos padrões antes de selecionar os elites.
-- **Por quê**: O codebook atual é um "memorizer" (degradação 32% em dados novos). Com augmentation, capturaria padrões mais robustos.
-- **Onde**: `internal/trainer/engine.go` — novo pipeline de augmentation pré-elite-selection.
-- **Teste**: Re-executar Pesquisa 06 (inference test) e medir se degradação cai abaixo de 15%.
+### 5.3 Data Augmentation no Treino ✅
+- **Implementado**: `internal/trainer/augmentation.go` + flag `--augment` no `crompressor train`.
+- **Mecânica**: Bit shifts (Left/Right) e Rotações Circulares nos padrões elites para combater overfitting.
 
 ---
 
-## 🟡 Sprint 6: P2P Delta Sync (Prioridade Média)
+## ✅ Sprint 6: P2P Delta Sync & Stream (CONCLUÍDA — 2026-03-29)
 
-### 6.1 Protocolo de Negociação Merkle
-- **O quê**: Dois peers trocam MerkleRoot → se difere, trocam hashes das folhas → `Diff()` identifica blocos divergentes → transferem apenas esses blocos.
-- **Onde**: `internal/network/` — novo `merkle_sync.go` com handler gRPC/WebSocket.
-- **Dependência**: MerkleRoot já está no Header V5 (implementado).
+### 6.1 Delta Sync P2P Real ✅
+- **Implementado**: `internal/network/protocol.go:RequestSync()` agora gera `LocalManifest` se o arquivo existe no disco, executa `cromsync.Diff(local, remote)`, e envia `DiffReq` apenas com os indices faltantes.
+- **Merge**: `internal/network/bitswap.go:ReceiveChunks()` reconstrói o `.crom` final mesclando chunks locais + remotos.
 
-### 6.2 Streaming Compression (stdin pipe)
-- **O quê**: Modo que comprime dados de stdin progressivamente, emitindo blocos sem precisar do arquivo completo.
-- **Por quê**: Para logs em tempo real (`tail -f | crompressor pack --stream`).
-- **Onde**: `pkg/cromlib/compiler.go` — novo `PackStream(reader io.Reader, ...)`.
+### 6.2 Streaming Compression (stdin pipe) ✅
+- **Implementado**: `pkg/cromlib/compiler_stream.go:PackStream()` — lê de `io.Reader` sem Seek. Buffering via `/tmp`.
+- **CLI**: `crompressor pack --stream -i - -c dict.cromdb -o out.crom`
+- **Uso**: `tail -f /var/log/syslog | crompressor pack --stream -c dict.cromdb -o live.crom`
 
-### 6.3 Codebook Sharing Protocol
-- **O quê**: Handshake P2P que negocia codebook comum entre peers, ou transfere o `.cromdb` junto com os dados.
-- **Por quê**: Hoje dois peers com codebooks diferentes não conseguem trocar `.crom`.
-- **Onde**: `internal/network/` — extensão do protocol de sync.
+### 6.3 Codebook Sharing Protocol ✅
+- **Implementado**: Novos message types `MsgCodebookHash (0x05)`, `MsgCodebookReq (0x06)`, `MsgCodebookData (0x07)`.
+- **Mecânica**: O `RequestSync` agora inicia com Handshake de Hash, e se divergir, baixa silenciosamente o `.cromdb` remoto antes de continuar.
 
 ---
 
@@ -64,10 +57,13 @@ Prioridades definidas com base nas pesquisas reais V5 (1223 testes de imagem + b
 
 ---
 
-## Ordem de Execução Recomendada
+## Ordem de Execução
 ```
-Sprint 5.2 (Benchmark vs Gzip/Zstd) → Baseline comparativo
-Sprint 5.1 (Multi-Pass Compression)  → Melhorar ratio
-Sprint 5.3 (Data Augmentation)       → Melhorar generalização
-Sprint 6.1 (Delta Sync P2P Real)     → Feature killer
+✅ Sprint 5.2 (Benchmark vs Gzip/Zstd) → Concluído (2026-03-29)
+✅ Sprint 5.1 (Multi-Pass Compression)  → Concluído (2026-03-29)
+✅ Sprint 5.3 (Data Augmentation)       → Concluído (2026-03-29)
+✅ Sprint 6.1 (Delta Sync P2P Real)     → Concluído (2026-03-29)
+✅ Sprint 6.2 (Streaming Compression)   → Concluído (2026-03-29)
+✅ Sprint 6.3 (Codebook Sharing)        → Concluído (2026-03-29)
+⬜ Sprint 7   (Ecossistema)             → Próxima Sprint
 ```

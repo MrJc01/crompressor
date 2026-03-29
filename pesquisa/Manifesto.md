@@ -17,7 +17,7 @@ Este repositório contém as evidências de laboratório coletadas para atestar 
 | **9. Stalling/Backpressure** | ✅ PASS | Zstd Rescue + Header V5 adaptativo evitam congestionamentos. |
 | **10. Sustentabilidade** | ✅ PASS | Redução de I/O drástica e dicionários reutilizáveis (Transfer Learning). |
 | **11. Fragmentação** | ✅ PASS | Padrões únicos mapeados bit-a-bit e mesclados via Incremental Train. |
-| **12. Universalidade Visual** | ✅ PASS | 1121/1223 testes PASS na Pesquisa 06. BMP/TIFF/SVG ultra viáveis. |
+| **12. Universalidade Visual** | ✅ PASS | 1401/1503 testes PASS na Pesquisa 06 (93.2%). BMP/TIFF/SVG ultra viáveis. |
 | **13. Auto-Brain Routing** | ✅ PASS | Seleção automática de codebook via Magic Bytes + Entropia Shannon. |
 | **14. Merkle Integrity** | ✅ PASS | MerkleRoot de 32 bytes gravado no Header V5 para Delta Sync P2P. |
 
@@ -48,12 +48,12 @@ Este repositório contém as evidências de laboratório coletadas para atestar 
 - **V5**: Streaming I/O + Prometheus metrics permitem dashboards de economia em tempo real.
 
 ### [Teste 06] Análise de Formatos de Imagens — Universalidade
-- **Cenário**: 7 formatos × Múltiplos Codebooks = **1223 testes** (280 same-brain + cross + inference + universal).
-- **Resultado V5**:
-  - BMP: **21.82% saving** | TIFF: **20.32% saving** | SVG: **34.73% saving**
-  - PNG/WebP: Passthrough (formatos já ultra-comprimidos)
-  - **1121/1223 testes PASS (91.7%)**
-- **Diferencial**: Auto-Brain seleciona automaticamente o brain ideal para cada formato.
+- **Cenário**: 7 formatos × Múltiplos Codebooks = **1503 testes** (com Data Augmentation ativo).
+- **Resultado V5.3**:
+  - BMP: **21.85% saving** | TIFF: **20.38% saving** | SVG: **34.80% saving**
+  - PNG/WebP: Passthrough intacto (formatos já ultra-comprimidos)
+  - **1401/1503 testes PASS (93.2%)**
+- **Diferencial**: Auto-Brain seleciona automaticamente o brain ideal. O Data Augmentation turbinou a generalização em imagens brutas.
 
 ---
 

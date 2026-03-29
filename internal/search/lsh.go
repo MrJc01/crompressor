@@ -39,6 +39,31 @@ func (ls *LSHSearcher) buildIndex() {
 	}
 }
 
+// Restrict prunes the search space to only allowed CodebookIDs, ignoring the rest.
+func (ls *LSHSearcher) Restrict(allowed []uint64) {
+	allowedMap := make(map[uint64]bool, len(allowed))
+	for _, id := range allowed {
+		allowedMap[id] = true
+	}
+
+	for bucket, ids := range ls.buckets {
+		var filtered []uint64
+		for _, id := range ids {
+			if allowedMap[id] {
+				filtered = append(filtered, id)
+			}
+		}
+		if len(filtered) > 0 {
+			ls.buckets[bucket] = filtered
+		} else {
+			delete(ls.buckets, bucket)
+		}
+	}
+	if ls.linear != nil {
+		ls.linear.Restrict(allowed)
+	}
+}
+
 // computeLSH generates a 16-bit locality sensitive hash.
 // For binary Hamming space, an exact projection (e.g., first 16 bits)
 // serves as an extremely fast and perfectly sensitive spatial clustering

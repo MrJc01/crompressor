@@ -54,8 +54,6 @@ func TestTwoNodeSync(t *testing.T) {
 	syncProtoA := NewSyncProtocol(nodeA)
 	_ = syncProtoA
 
-	nodeA.setupSovereigntyAuth()
-
 	// Get Node A's address for B to connect directly without discovery
 	addrsA := nodeA.Host.Addrs()
 	if len(addrsA) == 0 {
@@ -76,7 +74,6 @@ func TestTwoNodeSync(t *testing.T) {
 	defer nodeB.Stop()
 
 	syncProtoB := NewSyncProtocol(nodeB)
-	nodeB.setupSovereigntyAuth()
 
 	// 6. Connect Node B to Node A
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

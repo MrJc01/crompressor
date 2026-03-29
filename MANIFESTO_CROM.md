@@ -85,16 +85,20 @@ Desenvolvedores sêniores que disparam 50 instâncias idênticas para microsserv
 
 ---
 
-## 6. Roadmap e Futuro: O Enxame de Dados
+## 6. O Enxame de Dados (V6+ Arquitetura)
 
-A Fase 7 já é uma realidade: O **CROM Network Layer** fundiu nossa estrutura ao `libp2p`. 
-O binário converte máquinas num **Enxame de Dados (Data Swarm)**. Descobrimos nós em rede WAN via *Kademlia DHT* e pareamos hosts LAN por *mDNS*. 
+A Fase atual materializou o **CROM Network Layer**, fundindo nossa estrutura de compilação local a uma malha global `libp2p`. O binário do Crompressor é um super-nó completo de um **Enxame de Dados (Data Swarm)**, rodando Discovery via *mDNS* e *Kademlia DHT* nativamente.
 
-A autenticação é selada pelo `BuildHash` do Codebook. Dois nós com percepções da realidade (Codebooks) diferentes não "falam a mesma língua" e são rejeitados no handshake pelo Noise TCP/QUIC. No futuro, implementaremos:
+Hoje alcançamos propriedades de rede extraordinárias:
+1. **P2P Delta Sync Granular:** Se dois nós compartilham um arquivo editado, eles não trafegam o arquivo de novo. Eles cruzam as *Merkle Trees* dos blocos e baixam apenas a fita "residual" (*DiffReq*), fundindo-a ao arquivo existente O(1).
+2. **Codebook Handshake:** Dois nós com percepções da realidade (Codebooks) diferentes agora negociam ativamente o Codebook antes das transferências, garantindo que "falem a mesma língua" (HOT mode transfer) ou abortem para evitar corrupção lógica.
+3. **Streaming Compression:** Suporte a Pipes I/O puros (`tail -f sys.log | crompressor pack --stream`). Os inodes temporários acumulam deltas na memória sem travar disco, fechando a montagem `.crom` apenas no final. Excelente para SRE Log Shippers.
+
+No futuro (V7+), implementaremos:
 - Descompressão Paralela Distribuída no núcleo P2P.
-- Roteamento Bitswap inter-níveis (Swarm Routing).
-- Rolling Hashes para fronteiras elásticas de chunking.
+- Roteamento Bitswap inter-níveis (Swarm Routing multi-peer).
+- Chunking em Múltiplos Codebooks Simultâneos (Mixture of Experts).
 
-O CROM não reduz o que você cria para caber numa caixa menor. Ele reprograma a infraestrutura local para que seus dados sejam reconstruídos pelo tecido do Sistema.
+O CROM não reduz o que você cria para caber numa caixa menor. Ele reprograma a infraestrutura local para que seus dados transitem e sejam reconstruídos pelo tecido do Sistema.
 
 Bem-vindos ao salto da **Compilação de Realidade**.

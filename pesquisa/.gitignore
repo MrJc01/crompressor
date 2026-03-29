@@ -17,6 +17,7 @@
 !04-p2p_soberania/
 !05-tco_storage_frio/
 !06-image_format_analysis/
+!07-benchmark_comparativo/
 
 # 🚫 Ignorar dados binários e logs dentro das pastas de teste
 01-logs_redundancia/*
@@ -33,6 +34,10 @@
 !06-image_format_analysis/*.md
 !06-image_format_analysis/scripts/
 !06-image_format_analysis/scripts/*.sh
+
+07-benchmark_comparativo/*
+!07-benchmark_comparativo/*.md
+!07-benchmark_comparativo/*.sh
 
 # 🚫 Ignorar datasets reais (apenas README nestas pastas)
 datasets/*

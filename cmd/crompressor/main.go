@@ -225,6 +225,7 @@ func shareCmd() *cobra.Command {
 func trainCmd() *cobra.Command {
 	var inputDir, outputPath, updatePath, basePath string
 	var maxCodewords, concurrency, chunkSize int
+	var augmentTrain bool
 
 	cmd := &cobra.Command{
 		Use:   "train",
@@ -271,6 +272,7 @@ func trainCmd() *cobra.Command {
 			}
 			opts.UpdatePath = updatePath
 			opts.BasePath = basePath
+			opts.DataAugmentation = augmentTrain
 			opts.OnProgress = func(n int) {
 				bar.Add(n)
 			}
@@ -301,6 +303,7 @@ func trainCmd() *cobra.Command {
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "Número de goroutines para processamento paralelo")
 	cmd.Flags().StringVar(&updatePath, "update", "", "Caminho para .cromdb existente (atualização incremental)")
 	cmd.Flags().StringVar(&basePath, "base", "", "Caminho para .cromdb base (transfer learning)")
+	cmd.Flags().BoolVar(&augmentTrain, "augment", false, "Aplica Data Augmentation nos padrões elites para previnir overfitting")
 
 	return cmd
 }
@@ -311,6 +314,8 @@ func packCmd() *cobra.Command {
 	var useCDC bool
 	var encryptionKey string
 	var autoBrain bool
+	var multiPass bool
+	var streamMode bool
 	var brainDir string
 
 	cmd := &cobra.Command{
@@ -375,11 +380,40 @@ func packCmd() *cobra.Command {
 				opts.ChunkSize = chunkSize
 			}
 			opts.UseCDC = useCDC
+			opts.MultiPass = multiPass
 			if encryptionKey != "" {
 				opts.EncryptionKey = encryptionKey
 			}
 			opts.OnProgress = func(n int) {
 				bar.Add(n)
+			}
+
+			if streamMode {
+				// Stream mode: read from file or stdin without Seek
+				var reader io.Reader
+				if input == "-" {
+					reader = os.Stdin
+				} else {
+					f, err := os.Open(input)
+					if err != nil {
+						return err
+					}
+					defer f.Close()
+					reader = f
+				}
+
+				metrics, err := cromlib.PackStream(reader, output, codebookPath, opts)
+				if err != nil {
+					return fmt.Errorf("erro no stream pack: %v", err)
+				}
+
+				fmt.Printf("\n✔ Stream Pack completed\n")
+				fmt.Printf("  Original Size: %d bytes\n", metrics.OriginalSize)
+				fmt.Printf("  Packed Size:   %d bytes (%.2f%% ratio)\n",
+					metrics.PackedSize,
+					float64(metrics.PackedSize)/float64(metrics.OriginalSize)*100)
+				fmt.Printf("  Hit Rate:      %.2f%%\n", metrics.HitRate)
+				return nil
 			}
 
 			metrics, err := cromlib.Pack(input, output, codebookPath, opts)
@@ -413,6 +447,8 @@ func packCmd() *cobra.Command {
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "Número de goroutines para processamento paralelo")
 	cmd.Flags().IntVarP(&chunkSize, "chunk-size", "k", 0, "Tamanho base dos chunks (0 = auto)")
 	cmd.Flags().BoolVar(&useCDC, "cdc", false, "Habilitar Content-Defined Chunking")
+	cmd.Flags().BoolVar(&multiPass, "multi-pass", false, "Habilitar compressão LSH Top-K em Duas Passagens (Otimiza delta)")
+	cmd.Flags().BoolVar(&streamMode, "stream", false, "Modo streaming — comprime pipes/stdin sem Seek (ex: tail -f | crompressor pack --stream)")
 	cmd.Flags().StringVar(&encryptionKey, "encrypt", "", "Chave/Senha para criptografia AES-256-GCM")
 
 	return cmd

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -27,6 +28,7 @@ type PackOptions struct {
 	EncryptionKey string // Passphrase for AES-256-GCM. If empty, no encryption.
 	ChunkSize     int    // Size of the chunks (default 128)
 	UseCDC        bool   // If true, uses Content-Defined Chunking instead of FixedChunker
+	MultiPass     bool   // If true, restricts codebook usage to Top-256 patterns via two-pass
 	// Callback for progress bar integration, called with bytes processed
 	OnProgress func(bytesProcessed int)
 }
@@ -213,6 +215,53 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		fc = chunker.NewCDCChunker(opts.ChunkSize)
 	} else {
 		fc = chunker.NewFixedChunker(opts.ChunkSize)
+	}
+
+	if opts.MultiPass && cb != nil {
+		freq := make(map[uint64]int)
+		bufP1 := make([]byte, BlockSize)
+		for {
+			n, errRead := io.ReadFull(inFile, bufP1)
+			if errRead == io.ErrUnexpectedEOF {
+				errRead = nil
+			}
+			if n > 0 {
+				chunks := fc.Split(bufP1[:n])
+				for _, c := range chunks {
+					match, err := searcher.FindBestMatch(c.Data)
+					if err == nil {
+						freq[match.CodebookID]++
+					}
+				}
+			}
+			if errRead == io.EOF || errRead != nil {
+				break
+			}
+		}
+
+		type idFreq struct {
+			id    uint64
+			count int
+		}
+		var s []idFreq
+		for id, c := range freq {
+			s = append(s, idFreq{id, c})
+		}
+		sort.Slice(s, func(i, j int) bool { return s[i].count > s[j].count })
+
+		limit := 256 // Top-256 gives a very constrained vocabulary for strong Delta Compression
+		if len(s) < limit {
+			limit = len(s)
+		}
+
+		var allowed []uint64
+		for i := 0; i < limit; i++ {
+			allowed = append(allowed, s[i].id)
+		}
+
+		searcher.Restrict(allowed)
+		inFile.Seek(0, 0)
+		opts.OnProgress(0) // Reset Progress Bar after quick pass
 	}
 
 	var finalEntries []format.ChunkEntry

@@ -21,6 +21,7 @@ type TrainOptions struct {
 	Concurrency  int
 	ChunkSize    int // Size of chunks used for pattern extraction
 	OnProgress   func(bytesProcessed int)
+	DataAugmentation bool // Applies bit shifts before elite selection to combat overfitting
 
 	// UpdatePath: path to an existing .cromdb to update incrementally.
 	// Existing patterns are seeded into the frequency table with a high
@@ -147,6 +148,12 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 	wg.Wait()
 
 	uniquePatterns := ft.Len()
+
+	// Phase 2.5: Data Augmentation (Sprint 5.3)
+	if opts.DataAugmentation {
+		// Augment top 50% of the target words
+		AugmentPatterns(ft, opts.MaxCodewords/2)
+	}
 
 	var mergedPatterns, replacedSlots int
 
