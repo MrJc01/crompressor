@@ -11,7 +11,7 @@ INDEX_FILE="$PROJECT_DIR/index.md"
 echo "📝 Gerando índice dinâmico (index.md)..."
 
 cat <<EOF > "$INDEX_FILE"
-# 🧪 Pesquisa e Viabilidade Técnica: Crompressor V2
+# 🧪 Pesquisa e Viabilidade Técnica: Crompressor V3
 
 Este arquivo é o ponto central de auditoria para todos os experimentos de compressão soberana.
 

@@ -17,6 +17,10 @@ const (
 	Version1 uint16 = 1
 	// Version2 introduces block-based Deltas and AES-GCM encryption.
 	Version2 uint16 = 2
+	// Version3 introduces entropy passthrough.
+	Version3 uint16 = 3
+	// Version4 introduces adaptive ChunkSize and CodebookHash
+	Version4 uint16 = 4
 
 	// HashSize is the size of SHA-256 hashes (32 bytes).
 	HashSize = 32
@@ -29,12 +33,14 @@ const (
 	//   Magic (4)
 	//   Version (2)
 	//   IsEncrypted (1)
-	//   Reserved (1)
+	//   IsPassthrough (1)
 	//   Salt (16)
 	//   OriginalHash (32)
 	//   OriginalSize (8)
-	//   ChunkCount (4)
 	HeaderSizeV2 = 68
+
+	// HeaderSizeV4 adds ChunkSize (4) and CodebookHash (8). Total 80 bytes.
+	HeaderSizeV4 = 80
 
 	// EntrySize is the fixed size of a ChunkEntry in the Chunk Table (24 bytes).
 	EntrySize = 8 + 8 + 4 + 4
@@ -42,16 +48,24 @@ const (
 	// ChunksPerBlock is the number of chunks grouped into a single Zstd frame in V2.
 	// Must match cromlib.BlockSize / chunker.DefaultChunkSize = 16MB / 128B = 131072.
 	ChunksPerBlock = 131072
+
+	// LiteralCodebookID is a sentinel value (MAX_UINT64) used to mark chunks
+	// where no good codebook match was found. These chunks are stored verbatim
+	// in the delta pool without XOR against a pattern.
+	LiteralCodebookID = ^uint64(0)
 )
 
 // Header contains the top-level metadata of a .crom file.
 type Header struct {
-	Version      uint16
-	IsEncrypted  bool
-	Salt         [16]byte
+	Version       uint16
+	IsEncrypted   bool
+	IsPassthrough bool
+	Salt          [16]byte
 	OriginalHash [HashSize]byte
 	OriginalSize uint64
 	ChunkCount   uint32
+	ChunkSize    uint32
+	CodebookHash [8]byte
 }
 
 // NumBlocks returns the expected number of Zstd blocks for this file (V2 only).
@@ -89,15 +103,27 @@ func ParseHeader(data []byte) (*Header, error) {
 		return h, nil
 	}
 
-	if h.Version == Version2 {
-		if len(data) < HeaderSizeV2 {
-			return nil, fmt.Errorf("format: v2 header too small (%d < %d)", len(data), HeaderSizeV2)
+	if h.Version == Version2 || h.Version == Version3 || h.Version == Version4 {
+		minSize := HeaderSizeV2
+		if h.Version == Version4 {
+			minSize = HeaderSizeV4
+		}
+		if len(data) < minSize {
+			return nil, fmt.Errorf("format: header too small for v%d (%d < %d)", h.Version, len(data), minSize)
 		}
 		h.IsEncrypted = data[6] == 1
+		if h.Version >= Version3 {
+			h.IsPassthrough = data[7] == 1
+		}
 		copy(h.Salt[:], data[8:24])
 		copy(h.OriginalHash[:], data[24:56])
 		h.OriginalSize = binary.LittleEndian.Uint64(data[56:64])
 		h.ChunkCount = binary.LittleEndian.Uint32(data[64:68])
+		
+		if h.Version == Version4 {
+			h.ChunkSize = binary.LittleEndian.Uint32(data[68:72])
+			copy(h.CodebookHash[:], data[72:80])
+		}
 		return h, nil
 	}
 
@@ -116,18 +142,35 @@ func (h *Header) Serialize() []byte {
 		return buf
 	}
 
-	// Default to V2
-	h.Version = Version2
-	buf := make([]byte, HeaderSizeV2)
+	// Default to V4 if not explicitly set and not V1
+	if h.Version < Version2 || h.Version > Version4 {
+		h.Version = Version4
+	}
+	
+	size := HeaderSizeV2
+	if h.Version == Version4 {
+		size = HeaderSizeV4
+	}
+	
+	buf := make([]byte, size)
 	copy(buf[0:MagicSize], MagicString)
 	binary.LittleEndian.PutUint16(buf[4:6], h.Version)
 	if h.IsEncrypted {
 		buf[6] = 1
 	}
+	if h.IsPassthrough {
+		buf[7] = 1
+	}
 	copy(buf[8:24], h.Salt[:])
 	copy(buf[24:56], h.OriginalHash[:])
 	binary.LittleEndian.PutUint64(buf[56:64], h.OriginalSize)
 	binary.LittleEndian.PutUint32(buf[64:68], h.ChunkCount)
+	
+	if h.Version == Version4 {
+		binary.LittleEndian.PutUint32(buf[68:72], h.ChunkSize)
+		copy(buf[72:80], h.CodebookHash[:])
+	}
+	
 	return buf
 }
 

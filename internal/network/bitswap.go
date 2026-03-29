@@ -25,7 +25,7 @@ func StreamChunks(localPath, codebookPath, encryptionKey string, indices []uint3
 	defer f.Close()
 
 	reader := format.NewReader(f)
-	header, blockTable, entries, compDeltaPool, err := reader.Read(encryptionKey)
+	header, blockTable, entries, rStream, err := reader.ReadStream(encryptionKey)
 	if err != nil {
 		return err
 	}
@@ -35,14 +35,13 @@ func StreamChunks(localPath, codebookPath, encryptionKey string, indices []uint3
 		derivedKey = crypto.DeriveKey([]byte(encryptionKey), header.Salt[:])
 	}
 
-	// For efficiency since indices can span blocks, we decompress only the blocks we need.
-	// But for simplicity in this implementation, we decompress the whole pool on demand.
 	var uncompressedPool []byte
-	if header.Version == format.Version2 {
-		offset := 0
+	if header.Version >= format.Version2 {
 		for i, blockSize := range blockTable {
-			blockData := compDeltaPool[offset : offset+int(blockSize)]
-			offset += int(blockSize)
+			blockData := make([]byte, blockSize)
+			if _, err := io.ReadFull(rStream, blockData); err != nil {
+				return fmt.Errorf("bitswap: read block %d: %w", i, err)
+			}
 
 			if header.IsEncrypted {
 				dec, err := crypto.Decrypt(derivedKey, blockData)
@@ -59,6 +58,7 @@ func StreamChunks(localPath, codebookPath, encryptionKey string, indices []uint3
 			uncompressedPool = append(uncompressedPool, decompressed...)
 		}
 	} else {
+		compDeltaPool, _ := io.ReadAll(rStream)
 		uncompressedPool, err = delta.DecompressPool(compDeltaPool)
 		if err != nil {
 			return err

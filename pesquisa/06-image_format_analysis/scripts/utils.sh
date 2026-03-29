@@ -4,7 +4,7 @@
 # ==============================================================================
 
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-_BIN_REAL="$(cd "$BASE_DIR/../../" && pwd)/crompressor"
+_BIN_REAL="$(cd "$BASE_DIR/../../" && pwd)/bin/crompressor"
 # Symlink sem espaço no path para evitar problemas de quoting em subshells
 BIN="/tmp/crompressor_research_bin"
 if [ ! -L "$BIN" ] || [ "$(readlink -f "$BIN")" != "$(readlink -f "$_BIN_REAL")" ]; then

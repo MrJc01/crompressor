@@ -21,6 +21,20 @@ type MatchResult struct {
 	Distance int
 }
 
+// Similarity returns a 0.0-1.0 value representing how closely the match
+// resembles the input chunk. 1.0 = perfect match (distance=0), 0.0 = completely different.
+// chunkBits is len(chunk)*8 (total bits in the input).
+func (m MatchResult) Similarity(chunkBits int) float64 {
+	if chunkBits == 0 {
+		return 0
+	}
+	s := 1.0 - float64(m.Distance)/float64(chunkBits)
+	if s < 0 {
+		return 0
+	}
+	return s
+}
+
 // Searcher defines the interface for finding patterns in a Codebook.
 type Searcher interface {
 	// FindBestMatch searches for the codeword that is most similar to the given chunk.

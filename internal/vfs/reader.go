@@ -32,8 +32,8 @@ type RandomReader struct {
 // We expect exactly the data from format.Reader.Read(), minus the compDeltaPool, but because
 // we want stream reading of the pool, we compute offsets here.
 func NewRandomReader(f io.ReaderAt, fileSize int64, header *format.Header, blockTable []uint32, entries []format.ChunkEntry, cb *codebook.Reader, encryptionKey string) (*RandomReader, error) {
-	if header.Version != format.Version2 {
-		return nil, fmt.Errorf("vfs: only Version 2 formats support Random Access")
+	if header.Version < format.Version2 {
+		return nil, fmt.Errorf("vfs: only Version 2+ formats support Random Access")
 	}
 
 	rr := &RandomReader{
@@ -61,7 +61,12 @@ func NewRandomReader(f io.ReaderAt, fileSize int64, header *format.Header, block
 		tableSize += 28
 	}
 
-	baseOffset := int64(format.HeaderSizeV2 + len(blockTable)*4 + tableSize)
+	hSize := format.HeaderSizeV2
+	if header.Version == format.Version4 {
+		hSize = format.HeaderSizeV4
+	}
+
+	baseOffset := int64(hSize + len(blockTable)*4 + tableSize)
 
 	rr.blockOffsets = make([]int64, len(blockTable))
 	current := baseOffset
@@ -89,8 +94,12 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 
 	for bytesRead < int(bytesToRead) {
 		currentOff := off + int64(bytesRead)
-		chunkIndex := currentOff / int64(chunker.DefaultChunkSize)
-		chunkOffset := currentOff % int64(chunker.DefaultChunkSize)
+		cSize := int64(rr.header.ChunkSize)
+		if cSize == 0 {
+			cSize = int64(chunker.DefaultChunkSize)
+		}
+		chunkIndex := currentOff / cSize
+		chunkOffset := currentOff % cSize
 
 		if chunkIndex >= int64(len(rr.entries)) {
 			break
@@ -118,34 +127,39 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 
 		res := pool[entryLocalOffset:endOffset]
 
-		pattern, err := rr.cb.Lookup(entry.CodebookID)
-		if err != nil {
-			return bytesRead, fmt.Errorf("vfs: lookup codeword %d: %w", entry.CodebookID, err)
-		}
+		var reconstructedChunk []byte
+		if entry.CodebookID == format.LiteralCodebookID {
+			reconstructedChunk = res
+		} else {
+			pattern, err := rr.cb.Lookup(entry.CodebookID)
+			if err != nil {
+				return bytesRead, fmt.Errorf("vfs: lookup codeword %d: %w", entry.CodebookID, err)
+			}
 
-		usablePattern := pattern
-		if uint32(len(usablePattern)) > entry.OriginalSize {
-			usablePattern = usablePattern[:entry.OriginalSize]
-		}
-		if uint32(len(res)) > entry.OriginalSize {
-			res = res[:entry.OriginalSize]
-		}
+			usablePattern := pattern
+			if uint32(len(usablePattern)) > entry.OriginalSize {
+				usablePattern = usablePattern[:entry.OriginalSize]
+			}
+			if uint32(len(res)) > entry.OriginalSize {
+				res = res[:entry.OriginalSize]
+			}
 
-		// Ensure usablePattern and res have the same length for XOR (delta.Apply)
-		// Pad the shorter slice if needed to prevent slice bounds panic
-		targetLen := int(entry.OriginalSize)
-		if len(usablePattern) < targetLen {
-			padded := make([]byte, targetLen)
-			copy(padded, usablePattern)
-			usablePattern = padded
-		}
-		if len(res) < targetLen {
-			padded := make([]byte, targetLen)
-			copy(padded, res)
-			res = padded
-		}
+			// Ensure usablePattern and res have the same length for XOR (delta.Apply)
+			// Pad the shorter slice if needed to prevent slice bounds panic
+			targetLen := int(entry.OriginalSize)
+			if len(usablePattern) < targetLen {
+				padded := make([]byte, targetLen)
+				copy(padded, usablePattern)
+				usablePattern = padded
+			}
+			if len(res) < targetLen {
+				padded := make([]byte, targetLen)
+				copy(padded, res)
+				res = padded
+			}
 
-		reconstructedChunk := delta.Apply(usablePattern, res)
+			reconstructedChunk = delta.Apply(usablePattern, res)
+		}
 
 		// Clamp reconstructedChunk to entry.OriginalSize
 		if uint32(len(reconstructedChunk)) > entry.OriginalSize {

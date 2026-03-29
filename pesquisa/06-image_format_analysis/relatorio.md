@@ -6,8 +6,8 @@ interagem com o sistema de compressão do Crompressor (codebooks/cérebros).
 - **Formatos Testados**: BMP, PNG, JPEG, WebP, GIF, TIFF, SVG
 - **Cérebros Treinados**: 7 específicos + 1 universal
 - **Total de Combinações**: ~77 testes com verificação SHA-256
-- **Data da Auditoria**: 2026-03-29 07:47
-- **Status de Integridade**: ⚠️ 250/352 PASS
+- **Data da Auditoria**: 2026-03-29 16:50
+- **Status de Integridade**: ⚠️ 810/912 PASS
 
 ---
 
@@ -31,107 +31,103 @@ Dataset controlado gerado via ImageMagick: mesmas imagens-fonte convertidas para
 
 | Cérebro | Formato | Tempo (ms) | Tamanho (.cromdb) |
 |:--------|:--------|:-----------|:------------------|
-| **brain_bmp** | bmp | 366ms | 1.00 MB |
-| **brain_png** | png | 152ms | 1.00 MB |
-| **brain_jpg** | jpg | 67ms | 1.00 MB |
-| **brain_webp** | webp | 122ms | 1.00 MB |
-| **brain_gif** | gif | 106ms | 1.00 MB |
-| **brain_tiff** | tiff | 336ms | 1.00 MB |
-| **brain_svg** | svg | 77ms | 1.00 MB |
-| **brain_universal** | universal | 974ms | 1.00 MB |
+| **brain_bmp** | bmp | 714ms | 1.00 MB |
+| **brain_png** | png | 271ms | 1.00 MB |
+| **brain_jpg** | jpg | 127ms | 1.00 MB |
+| **brain_webp** | webp | 126ms | 1.00 MB |
+| **brain_gif** | gif | 134ms | 1.00 MB |
+| **brain_tiff** | tiff | 417ms | 1.00 MB |
+| **brain_svg** | svg | 80ms | 1.00 MB |
+| **brain_universal** | universal | 959ms | 1.00 MB |
 
 ---
 
 ## 📊 3. Experimento A: Compressão Nativa (Formato × Seu Próprio Cérebro)
 
-> **Pergunta:** "Qual formato o Crompressor comprime melhor quando treinado especificamente?"
-> **Resposta:** O Crompressor obteve suas melhores reduções em imagens lossy texturizadas (**JPEG** atingiu ~40% de economia) e em vetores simulados (**SVG** a 34%). Formatos brutos (**BMP** e **TIFF**) tiveram ganhos razoáveis na faixa dos 20%. No entanto, algoritmos hiper-otimizados/lossless por natureza (**PNG**, **WebP**, **GIF**) resultaram em **economia negativa** (arquivos injetados com entropia extra). Isso prova que o Crompressor brilha sob dados com redundâncias não extraídas (BMP/TIFF) ou padrões previsíveis (JPEG), não devendo atuar sobre dados já encodados em zlib/lzw.
+> Pergunta: "Qual formato o Crompressor comprime melhor quando treinado especificamente?"
 
 | Formato | Tam. Original (Méd.) | Tam. CROM (Méd.) | Ratio (%) | Economia (%) | Verify |
 |:--------|:---------------------|:-----------------|:----------|:-------------|:-------|
-| **bmp** | 1.03 MB | 830.25 KB | 78,22% | **21,77%** | ⚠️ MIXED |
-| **png** | 367.91 KB | 403.52 KB | 108,65% | **-8,65%** | ⚠️ MIXED |
-| **jpg** | 45.52 KB | 27.71 KB | 60,08% | **39,92%** | ⚠️ MIXED |
-| **webp** | 178.66 KB | 182.78 KB | 101,58% | **-1,57%** | ⚠️ MIXED |
-| **gif** | 177.86 KB | 182.20 KB | 101,47% | **-1,48%** | ⚠️ MIXED |
-| **tiff** | 1002.27 KB | 796.32 KB | 79,65% | **20,35%** | ⚠️ MIXED |
-| **svg** | 60.92 KB | 40.48 KB | 65,33% | **34,67%** | ⚠️ MIXED |
+| **bmp** | 1.03 MB | 830.19 KB | 78,22% | **21,77%** | ⚠️ MIXED |
+| **png** | 367.91 KB | 367.98 KB | 100,00% | **0,00%** | ⚠️ MIXED |
+| **jpg** | 45.52 KB | 42.82 KB | 91,47% | **8,53%** | ⚠️ MIXED |
+| **webp** | 178.66 KB | 178.74 KB | 100,00% | **0,00%** | ⚠️ MIXED |
+| **gif** | 177.86 KB | 179.29 KB | 100,42% | **-0,42%** | ⚠️ MIXED |
+| **tiff** | 1002.27 KB | 796.66 KB | 79,67% | **20,32%** | ⚠️ MIXED |
+| **svg** | 60.92 KB | 40.48 KB | 65,40% | **34,60%** | ⚠️ MIXED |
 
 ---
 
 ## 🔀 4. Experimento B: Matriz Cruzada (Formato × Cérebro Alheio)
 
-> **Pergunta:** "Um cérebro treinado em JPEGs comprime bem BMPs? E vice-versa?"
-> **Resposta:** **Não.** O penalty cruzado ("Cross-format penalty") explodiu para a casa dos milhares de porcento (Ex: Cérebro JPG inflando BMPs em +5.000%). Como o motor depende da identificação de padrões binários, alimentar uma estrutura comprimida/codificada usando um mapa neural de outro tipo resulta numa destruição total da eficiência logística. O isolamento de formato é mandatório.
+> Pergunta: "Um cérebro treinado em JPEGs comprime bem BMPs? E vice-versa?"
 
 ### Heatmap de Economia (%) — Linha=Formato, Coluna=Cérebro
 
 | FMT↓ BR→ | **bmp** | **png** | **jpg** | **webp** | **gif** | **tiff** | **svg** |
 |:---------|:------|:------|:------|:------|:------|:------|:------|
-| **bmp** | **4980%** | 5741% | 5595% | 4973% | 5753% | 4079% | 4088% |
-| **png** | 885% | **869%** | 905% | 794% | 873% | 855% | 923% |
-| **jpg** | 171% | 153% | **119%** | 232% | 142% | 156% | 182% |
-| **webp** | 546% | 660% | 589% | **590%** | 615% | 613% | 598% |
-| **gif** | 495% | 504% | 550% | 546% | **547%** | 592% | 511% |
-| **tiff** | 4431% | 3633% | 4469% | 3994% | 4192% | **3565%** | 3911% |
-| **svg** | 206% | 182% | 184% | 179% | 171% | 216% | **88%** |
+| **bmp** | **8050%** | 8719% | 9883% | 9272% | 9151% | 8725% | 9270% |
+| **png** | 84% | **69%** | 61% | 59% | 94% | 84% | 80% |
+| **jpg** | 466% | 403% | **320%** | 344% | 295% | 416% | 504% |
+| **webp** | 173% | 71% | 96% | **80%** | 99% | 90% | 175% |
+| **gif** | 65% | 74% | 110% | 61% | **72%** | 60% | 62% |
+| **tiff** | 8572% | 9144% | 11424% | 11058% | 12367% | **9280%** | 9953% |
+| **svg** | 390% | 359% | 481% | 455% | 392% | 500% | **587%** |
 
 ---
 
 ## 🔮 5. Experimento C: Inferência Pós-Treino (Imagens Novas)
 
-> **Pergunta:** "O cérebro generaliza para imagens que NUNCA viu durante o treinamento?"
-> **Resposta:** **Ainda não de forma confiável.** A degradação média foi de 42%, indicando severo **Overfitting**. As 40 amostras fotográficas da web foram insuficientes para criar um atlas generativo que englobe qualquer foto orgânica. Em escala SRE, inferências _zero-shot_ dependeriam de treinamentos volumosos na casa dos milhares/milhões.
+> Pergunta: "O cérebro generaliza para imagens que NUNCA viu durante o treinamento?"
 
 | Formato | Ratio Treino (%) | Ratio Inferência (%) | Degradação (%) | Generaliza? |
 |:--------|:-----------------|:---------------------|:---------------|:------------|
-| **bmp** | 78,00% | 90,30% | 22,00% | 🔴 NÃO (>50%) |
-| **png** | 108,00% | 118,00% | 65,00% | 🔴 NÃO (>50%) |
-| **jpg** | 60,00% | 117,90% | 8,00% | 🔴 NÃO (>50%) |
-| **webp** | 101,00% | 118,00% | 58,00% | 🔴 NÃO (>50%) |
-| **gif** | 101,00% | 118,00% | 47,00% | 🔴 NÃO (>50%) |
-| **tiff** | 79,00% | 90,80% | 65,00% | 🔴 NÃO (>50%) |
-| **svg** | 65,00% | 103,50% | 33,00% | 🔴 NÃO (>50%) |
+| **bmp** | 78,00% | 91,10% | 22,00% | 🔴 NÃO (>50%) |
+| **png** | 100,00% | 100,00% | 0,00% | 🔴 NÃO (>50%) |
+| **jpg** | 91,00% | 103,40% | 47,00% | 🔴 NÃO (>50%) |
+| **webp** | 100,00% | 100,00% | 0,00% | 🔴 NÃO (>50%) |
+| **gif** | 100,00% | 101,80% | 42,00% | 🔴 NÃO (>50%) |
+| **tiff** | 79,00% | 89,20% | 67,00% | 🔴 NÃO (>50%) |
+| **svg** | 65,00% | 103,80% | 40,00% | 🔴 NÃO (>50%) |
 
 ---
 
 ## 🌐 6. Experimento D: Cérebro Universal vs Especialistas
 
-> **Pergunta:** "Vale a pena manter 7 cérebros ou 1 universal resolve tudo?"
-> **Resposta:** **Use Especialistas, impreterivelmente.** O cérebro universal falhou para todos os 7 formatos, retendo um peso "morto" (Ratios > 100% ou marginalmente piores que as nativas). Ao forçar matrizes matemáticas divergentes (raw, lossless, xml e lossy) num codebook unificado de mesmo tamanho (8192 blocos), o cérebro diluiu sua acurácia polindo o vocabulário para um modelo ruidoso.
+> Pergunta: "Vale a pena manter 7 cérebros ou 1 universal resolve tudo?"
 
 | Formato | Ratio Universal (%) | Ratio Especialista (%) | Penalty (pp) | Veredicto |
 |:--------|:--------------------|:-----------------------|:-------------|:----------|
-| **bmp** | 82,88% | 78,00% | 22,00pp | 🔴 Use Especialista |
-| **png** | 116,80% | 108,00% | 65,00pp | 🔴 Use Especialista |
-| **jpg** | 116,58% | 60,00% | 8,00pp | 🔴 Use Especialista |
-| **webp** | 116,72% | 101,00% | 58,00pp | 🔴 Use Especialista |
-| **gif** | 116,80% | 101,00% | 47,00pp | 🔴 Use Especialista |
-| **tiff** | 84,04% | 79,00% | 65,00pp | 🔴 Use Especialista |
-| **svg** | 102,74% | 65,00% | 33,00pp | 🔴 Use Especialista |
+| **bmp** | 83,30% | 78,00% | 22,00pp | 🔴 Use Especialista |
+| **png** | 100,00% | 100,00% | 0,00pp | 🔴 Use Especialista |
+| **jpg** | 103,82% | 91,00% | 47,00pp | 🔴 Use Especialista |
+| **webp** | 100,00% | 100,00% | 0,00pp | 🔴 Use Especialista |
+| **gif** | 101,44% | 100,00% | 42,00pp | 🔴 Use Especialista |
+| **tiff** | 83,80% | 79,00% | 67,00pp | 🔴 Use Especialista |
+| **svg** | 102,96% | 65,00% | 40,00pp | 🔴 Use Especialista |
 
 ---
 
 ## 🧪 7. Validação de Hipóteses
 
 ### H1: Formatos brutos (BMP/TIFF) comprimem melhor
-- BMP saving: **21,77%** | TIFF saving: **20,35%**
-- JPG saving: **39,92%** | PNG saving: **-8,65%**
+- BMP saving: **21,77%** | TIFF saving: **20,32%**
+- JPG saving: **8,53%** | PNG saving: **0,00%**
 - **Resultado: ❌ REFUTADA** — Formatos comprimidos também são bem comprimidos pelo CROM.
 
 ### H2: JPEG/WebP (pré-comprimidos) têm desempenho inferior
-- JPEG saving: **39,92%** | WebP saving: **-1,57%**
+- JPEG saving: **8,53%** | WebP saving: **0,00%**
 - BMP saving: **21,77%** (referência raw)
 - **Resultado: ❌ REFUTADA** — O CROM encontra padrões mesmo em dados pré-comprimidos.
 
 ### H3: Cross-format penalty é significativo
-- Saving médio nativo (diagonal): **Ganhos e perdas balanceados na sua curva natural (1536% indica ratio artificial se off-scale)**
-- Saving médio cruzado (off-diagonal): **Extrema catástrofe analítica (+1644% inflacionamento)**
-- Cross-format penalty: **Abismal**
-- **Resultado: ✅ CONFIRMADA** — O penalty cruzado paralisa a viabilidade do compressão. Evite permutar cérebros.
+- Saving médio nativo (diagonal): **2636,86%**
+- Saving médio cruzado (off-diagonal): **2955,74%**
+- Cross-format penalty: **pp**
+- **Resultado: ❌ REFUTADA** — O penalty cruzado é menor que 10pp, aceitável.
 
 ### H4: Imagens novas mantêm ≥70% da taxa do treino
-- Degradação média pós-treino: **42,57%**
+- Degradação média pós-treino: **31,14%**
 - **Resultado: ❌ REFUTADA** — O cérebro tem dificuldade para generalizar (degradação > 30%).
 
 ---

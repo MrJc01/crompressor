@@ -14,6 +14,7 @@ import (
 	"github.com/MrJc01/crompressor/internal/codebook"
 	"github.com/MrJc01/crompressor/internal/crypto"
 	"github.com/MrJc01/crompressor/internal/delta"
+	"github.com/MrJc01/crompressor/internal/entropy"
 	"github.com/MrJc01/crompressor/internal/search"
 	"github.com/MrJc01/crompressor/pkg/format"
 )
@@ -30,10 +31,13 @@ type PackOptions struct {
 
 // Metrics holds the output telemetry of the compilation process.
 type Metrics struct {
-	OriginalSize uint64
-	PackedSize   uint64
-	Duration     time.Duration
-	HitRate      float64 // Percentage of chunks perfectly matching or with < 50% bit delta
+	OriginalSize   uint64
+	PackedSize     uint64
+	Duration       time.Duration
+	HitRate        float64 // Percentage of chunks perfectly matching or with < 50% bit delta
+	LiteralChunks  int     // Number of chunks stored verbatim (no codebook match)
+	TotalChunks    int     // Total number of chunks processed
+	AvgSimilarity  float64 // Average similarity across all chunks (0.0-1.0)
 }
 
 // DefaultPackOptions returns sensible defaults.
@@ -56,19 +60,41 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 
 	opts.OnProgress(0)
 
-	cb, err := codebook.Open(codebookPath)
-	if err != nil {
-		return nil, fmt.Errorf("pack: failed to open codebook: %w", err)
-	}
-	defer cb.Close()
-
-	searcher := search.NewLSHSearcher(cb)
-
 	inFile, err := os.Open(inputPath)
 	if err != nil {
 		return nil, fmt.Errorf("pack: open input file: %w", err)
 	}
 	defer inFile.Close()
+
+	// 1. Analyze Entropy
+	eScore, startBytes, err := entropy.Analyze(inFile, 8192)
+	if err != nil {
+		return nil, fmt.Errorf("pack: entropy analysis: %w", err)
+	}
+	isPassthrough := entropy.IsPassthroughRequired(eScore, startBytes)
+
+	// Adaptive Chunk Size Configuration
+	if opts.ChunkSize <= 0 {
+		if eScore < 3.0 {
+			opts.ChunkSize = 64
+		} else if eScore < 6.0 {
+			opts.ChunkSize = 128
+		} else {
+			opts.ChunkSize = 512
+		}
+	}
+
+	// Rewind file to start
+	inFile.Seek(0, 0)
+	
+	var cb *codebook.Reader
+	if !isPassthrough {
+		cb, err = codebook.Open(codebookPath)
+		if err != nil {
+			return nil, fmt.Errorf("pack: failed to open codebook: %w", err)
+		}
+		defer cb.Close()
+	}
 
 	info, err := inFile.Stat()
 	if err != nil {
@@ -85,11 +111,21 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	}
 	defer outFile.Close()
 
-	// 1. Setup Header
+	// 2. Setup Header
 	header := &format.Header{
-		Version:      format.Version2,
-		OriginalSize: originalSize,
-		ChunkCount:   numEstimatedChunks,
+		Version:       format.Version4,
+		OriginalSize:  originalSize,
+		ChunkCount:    numEstimatedChunks,
+		IsPassthrough: isPassthrough,
+		ChunkSize:     uint32(opts.ChunkSize),
+	}
+
+	if cb != nil {
+		cbHashFull := cb.BuildHash()
+		copy(header.CodebookHash[:], cbHashFull[:8])
+	} else {
+		cbHashFull := sha256.Sum256([]byte(codebookPath))
+		copy(header.CodebookHash[:], cbHashFull[:8])
 	}
 
 	var derivedKey []byte
@@ -103,10 +139,42 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		derivedKey = crypto.DeriveKey([]byte(opts.EncryptionKey), salt)
 	}
 
-	headerBytes := header.Serialize()
+	// 3. Write Metadata or Passthrough Dump
+	if isPassthrough {
+		// Just copy the whole file into delta pool encrypted or plain!
+		header.ChunkCount = 0
+		header.OriginalHash = sha256.Sum256(startBytes) // Optional hash
+		
+		if _, err := outFile.Write(header.Serialize()); err != nil { return nil, err }
+		
+		hasher := sha256.New()
+		
+		if header.IsEncrypted {
+			// Read all chunks, encrypt, stream
+			// For simplicity and speed: if it's passthrough and encrypted we stream it
+			fullData, _ := io.ReadAll(io.TeeReader(inFile, hasher))
+			enc, err := crypto.Encrypt(derivedKey, fullData)
+			if err != nil { return nil, err }
+			outFile.Write(enc)
+		} else {
+			io.Copy(io.MultiWriter(outFile, hasher), inFile)
+		}
+		
+		// Update header hash
+		copy(header.OriginalHash[:], hasher.Sum(nil))
+		outFile.Seek(0, 0)
+		outFile.Write(header.Serialize())
+		
+		packedInfo, _ := outFile.Stat()
+		return &Metrics{
+			OriginalSize: originalSize,
+			PackedSize:   uint64(packedInfo.Size()),
+			Duration:     time.Since(start),
+			HitRate:      100,
+		}, nil
+	}
 
-	// 2. Write Dummy Space for Header, BlockTable, and ChunkTable
-	if _, err := outFile.Write(headerBytes); err != nil {
+	if _, err := outFile.Write(header.Serialize()); err != nil {
 		return nil, err
 	}
 
@@ -127,11 +195,13 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 
 	// Remember the offset where the Delta Pool starts, so we can
 	// truncate and rewrite if the estimated sizes were wrong.
+	headerBytes := header.Serialize()
 	deltaPoolStartOffset := int64(len(headerBytes)) + int64(len(blockTableSpace)) + int64(len(chunkTableSpace))
 
-	// 3. Process Stream
+	// 4. Process Stream
 	hasher := sha256.New()
 	
+	searcher := search.NewLSHSearcher(cb)
 	var fc chunker.Chunker
 	if opts.UseCDC {
 		fc = chunker.NewCDCChunker(opts.ChunkSize)
@@ -146,6 +216,9 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	buf := make([]byte, BlockSize)
 
 	var hitCount int
+	var literalCount int
+	var totalSimilarity float64
+	var totalChunks int
 
 	for {
 		// Use io.ReadFull to guarantee complete 16MB block reads.
@@ -166,6 +239,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 			type processedChunk struct {
 				entry format.ChunkEntry
 				res   []byte
+				sim   float64
 				err   error
 			}
 			results := make([]processedChunk, numChunks)
@@ -184,12 +258,28 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 							continue
 						}
 
-						residual := delta.XOR(chunk.Data, match.Pattern)
+						// Quality Threshold: if the match is too poor (< 20% similar),
+						// store the chunk as a literal instead of XOR against a bad pattern.
+						chunkBits := len(chunk.Data) * 8
+						sim := match.Similarity(chunkBits)
+
+						var residual []byte
+						var codeID uint64
+
+						if sim < 0.20 {
+							// Literal: store chunk data as-is
+							residual = chunk.Data
+							codeID = format.LiteralCodebookID
+						} else {
+							residual = delta.XOR(chunk.Data, match.Pattern)
+							codeID = match.CodebookID
+						}
 
 						results[i] = processedChunk{
 							res: residual,
+							sim: sim,
 							entry: format.ChunkEntry{
-								CodebookID:   match.CodebookID,
+								CodebookID:   codeID,
 								DeltaSize:    uint32(len(residual)),
 								OriginalSize: uint32(chunk.Size),
 							},
@@ -219,7 +309,12 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 				blockPlainDeltas = append(blockPlainDeltas, res.res...)
 				currentOffset += uint64(len(res.res))
 
-				if res.entry.DeltaSize > 0 {
+				totalChunks++
+				totalSimilarity += res.sim
+
+				if res.entry.CodebookID == format.LiteralCodebookID {
+					literalCount++
+				} else if res.entry.DeltaSize > 0 {
 					zeroes := 0
 					for _, b := range res.res {
 						if b == 0 {
@@ -288,31 +383,27 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	actualMetadataSize := actualHeaderSize + actualBlockTableSize + actualChunkTableSize
 
 	// If actual metadata size differs from what we reserved, we need to
-	// rewrite the entire file with correct offsets.
 	if actualMetadataSize != deltaPoolStartOffset {
-		// Read back all the delta pool data we already wrote
-		deltaPoolSize, _ := outFile.Seek(0, 2) // seek to end
+		deltaPoolSize, _ := outFile.Seek(0, 2)
 		deltaPoolSize -= deltaPoolStartOffset
-		deltaPoolData := make([]byte, deltaPoolSize)
+		
+		// Use Temp File to prevent MASSIVE MEMORY ALLOCATION which causes Delta Pool Overflow in 4K imagery.
+		tempFile, err := os.CreateTemp("", "crom_delta_*")
+		if err != nil { return nil, err }
 		outFile.Seek(deltaPoolStartOffset, 0)
-		io.ReadFull(outFile, deltaPoolData)
-
-		// Truncate and rewrite from the beginning
-		outFile.Truncate(actualMetadataSize + int64(len(deltaPoolData)))
+		io.Copy(tempFile, outFile)
+		tempFile.Seek(0, 0)
+		
+		outFile.Truncate(actualMetadataSize + deltaPoolSize)
 		outFile.Seek(0, 0)
 
-		if _, err := outFile.Write(header.Serialize()); err != nil {
-			return nil, err
-		}
-		if _, err := outFile.Write(blockTableRaw); err != nil {
-			return nil, err
-		}
-		if _, err := outFile.Write(tableData); err != nil {
-			return nil, err
-		}
-		if _, err := outFile.Write(deltaPoolData); err != nil {
-			return nil, err
-		}
+		if _, err := outFile.Write(header.Serialize()); err != nil { return nil, err }
+		if _, err := outFile.Write(blockTableRaw); err != nil { return nil, err }
+		if _, err := outFile.Write(tableData); err != nil { return nil, err }
+		
+		io.Copy(outFile, tempFile)
+		tempFile.Close()
+		os.Remove(tempFile.Name())
 	} else {
 		// Metadata size matches estimate — just seek back and overwrite in place
 		outFile.Seek(0, 0)
@@ -329,10 +420,18 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 
 	packedInfo, _ := outFile.Stat()
 
+	var avgSim float64
+	if totalChunks > 0 {
+		avgSim = totalSimilarity / float64(totalChunks)
+	}
+
 	return &Metrics{
-		OriginalSize: originalSize,
-		PackedSize:   uint64(packedInfo.Size()),
-		Duration:     time.Since(start),
-		HitRate:      (float64(hitCount) / float64(actualChunkCount)) * 100,
+		OriginalSize:  originalSize,
+		PackedSize:    uint64(packedInfo.Size()),
+		Duration:      time.Since(start),
+		HitRate:       (float64(hitCount) / float64(actualChunkCount)) * 100,
+		LiteralChunks: literalCount,
+		TotalChunks:   totalChunks,
+		AvgSimilarity: avgSim,
 	}, nil
 }

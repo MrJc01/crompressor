@@ -12,8 +12,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -25,6 +27,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/MrJc01/crompressor/internal/entropy"
 	"github.com/MrJc01/crompressor/internal/network"
 	"github.com/MrJc01/crompressor/internal/trainer"
 	"github.com/MrJc01/crompressor/internal/vfs"
@@ -55,6 +58,7 @@ mapas de referências determinísticos com fidelidade bit-a-bit.
 	rootCmd.AddCommand(unpackCmd())
 	rootCmd.AddCommand(trainCmd())
 	rootCmd.AddCommand(verifyCmd())
+	rootCmd.AddCommand(benchmarkCmd())
 	rootCmd.AddCommand(mountCmd())
 	rootCmd.AddCommand(infoCmd())
 	rootCmd.AddCommand(daemonCmd())
@@ -211,7 +215,7 @@ func shareCmd() *cobra.Command {
 }
 
 func trainCmd() *cobra.Command {
-	var inputDir, outputPath string
+	var inputDir, outputPath, updatePath, basePath string
 	var maxCodewords, concurrency, chunkSize int
 
 	cmd := &cobra.Command{
@@ -229,6 +233,15 @@ func trainCmd() *cobra.Command {
 			fmt.Printf("║  Input Dir: %-29s ║\n", inputDir)
 			fmt.Printf("║  Output:    %-29s ║\n", outputPath)
 			fmt.Printf("║  Target:    %-29d ║\n", maxCodewords)
+			if updatePath != "" {
+				fmt.Printf("║  Mode:      %-29s ║\n", "Incremental Update")
+				fmt.Printf("║  Base CB:   %-29s ║\n", updatePath)
+			} else if basePath != "" {
+				fmt.Printf("║  Mode:      %-29s ║\n", "Transfer Learning")
+				fmt.Printf("║  Base CB:   %-29s ║\n", basePath)
+			} else {
+				fmt.Printf("║  Mode:      %-29s ║\n", "Standard")
+			}
 			fmt.Println("╚═══════════════════════════════════════════╝")
 
 			bar := progressbar.DefaultBytes(
@@ -248,6 +261,8 @@ func trainCmd() *cobra.Command {
 			if chunkSize > 0 {
 				opts.ChunkSize = chunkSize
 			}
+			opts.UpdatePath = updatePath
+			opts.BasePath = basePath
 			opts.OnProgress = func(n int) {
 				bar.Add(n)
 			}
@@ -262,6 +277,10 @@ func trainCmd() *cobra.Command {
 			fmt.Printf("  Total Bytes:     %d\n", res.TotalBytes)
 			fmt.Printf("  Unique Patterns: %d\n", res.UniquePatterns)
 			fmt.Printf("  Elite Selected:  %d (Codebook Gerado)\n", res.SelectedElite)
+			if res.MergedPatterns > 0 {
+				fmt.Printf("  Merged Patterns: %d\n", res.MergedPatterns)
+				fmt.Printf("  Replaced Slots:  %d\n", res.ReplacedSlots)
+			}
 
 			return nil
 		},
@@ -270,8 +289,10 @@ func trainCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&inputDir, "input", "i", "", "Diretório com os dados de treinamento")
 	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "Caminho do .cromdb gerado")
 	cmd.Flags().IntVarP(&maxCodewords, "size", "s", 8192, "Número máximo de padrões no codebook (Target)")
-	cmd.Flags().IntVarP(&chunkSize, "chunk-size", "k", 128, "Tamanho base dos chunks (granularidade)")
+	cmd.Flags().IntVarP(&chunkSize, "chunk-size", "k", 0, "Tamanho base dos chunks (0 = auto)")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "Número de goroutines para processamento paralelo")
+	cmd.Flags().StringVar(&updatePath, "update", "", "Caminho para .cromdb existente (atualização incremental)")
+	cmd.Flags().StringVar(&basePath, "base", "", "Caminho para .cromdb base (transfer learning)")
 
 	return cmd
 }
@@ -339,6 +360,13 @@ func packCmd() *cobra.Command {
 				float64(metrics.PackedSize)/float64(metrics.OriginalSize)*100)
 			fmt.Printf("  Hit Rate:      %.2f%% dos chunks no Radar\n", metrics.HitRate)
 
+			var litPct float64
+			if metrics.TotalChunks > 0 {
+				litPct = float64(metrics.LiteralChunks) / float64(metrics.TotalChunks) * 100
+			}
+			fmt.Printf("  Literal Chunks: %d/%d (%.2f%%)\n", metrics.LiteralChunks, metrics.TotalChunks, litPct)
+			fmt.Printf("  Avg Similarity: %.2f%%\n", metrics.AvgSimilarity*100)
+
 			return nil
 		},
 	}
@@ -347,7 +375,7 @@ func packCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Caminho do arquivo .crom de saída")
 	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Caminho do Codebook (.cromdb)")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "Número de goroutines para processamento paralelo")
-	cmd.Flags().IntVarP(&chunkSize, "chunk-size", "k", 128, "Tamanho base dos chunks (granularidade)")
+	cmd.Flags().IntVarP(&chunkSize, "chunk-size", "k", 0, "Tamanho base dos chunks (0 = auto)")
 	cmd.Flags().BoolVar(&useCDC, "cdc", false, "Habilitar Content-Defined Chunking")
 	cmd.Flags().StringVar(&encryptionKey, "encrypt", "", "Chave/Senha para criptografia AES-256-GCM")
 
@@ -358,6 +386,7 @@ func unpackCmd() *cobra.Command {
 	var input, output, codebookPath string
 	var fuzziness float64
 	var encryptionKey string
+	var strict bool
 
 	cmd := &cobra.Command{
 		Use:   "unpack",
@@ -384,6 +413,7 @@ func unpackCmd() *cobra.Command {
 
 			opts := cromlib.DefaultUnpackOptions()
 			opts.Fuzziness = fuzziness
+			opts.Strict = strict
 			if encryptionKey != "" {
 				opts.EncryptionKey = encryptionKey
 			}
@@ -399,6 +429,7 @@ func unpackCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Caminho do Codebook (.cromdb)")
 	cmd.Flags().Float64Var(&fuzziness, "fuzziness", 0.0, "Variação na reconstrução (0 = Lossless, ex: 0.1 = 10% Fuzziness)")
 	cmd.Flags().StringVar(&encryptionKey, "encrypt", "", "Chave/Senha para descriptografia")
+	cmd.Flags().BoolVar(&strict, "strict", false, "Abortar desempacotamento ao encontrar qualquer bloco corrompido")
 
 	return cmd
 }
@@ -544,10 +575,11 @@ func infoCmd() *cobra.Command {
 			}
 
 			reader := format.NewReader(f)
-			header, blockTable, entries, compDeltaPool, err := reader.Read(encryptionKey)
+			header, blockTable, entries, rStream, err := reader.ReadStream(encryptionKey)
 			if err != nil {
 				return fmt.Errorf("erro ao parsear formato: %w", err)
 			}
+			compDeltaPool, _ := io.ReadAll(rStream)
 
 			// === Header ===
 			fmt.Println("\n═══ Header ═══")
@@ -658,6 +690,127 @@ func infoCmd() *cobra.Command {
 	cmd.Flags().StringVar(&encryptionKey, "encrypt", "", "Chave/Senha para descriptografia")
 	cmd.Flags().BoolVar(&exportManifest, "export", false, "Exporta o ChunkManifest para o stdout no formato JSON (útil via pipe)")
 	cmd.Flags().BoolVar(&networkMode, "network", false, "Exibe informações do nó na rede soberana")
+
+	return cmd
+}
+
+func benchmarkCmd() *cobra.Command {
+	var input, codebookPath, outputJson string
+	var runs int
+
+	cmd := &cobra.Command{
+		Use:   "benchmark",
+		Short: "Executa benchmark completo de compressão e descompressão",
+		Long:  `Executa N ciclos de Pack + Unpack + Verify usando os mesmos dados, emitindo métricas em JSON.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if input == "" || codebookPath == "" {
+				return fmt.Errorf("flags --input e --codebook são obrigatórias")
+			}
+
+			inputBytes, err := os.ReadFile(input)
+			if err != nil {
+				return fmt.Errorf("read input: %w", err)
+			}
+			inputEntropy, _, _ := entropy.Analyze(bytes.NewReader(inputBytes), len(inputBytes))
+
+			type Output struct {
+				InputFile     string  `json:"input_file"`
+				InputSize     uint64  `json:"input_size"`
+				InputEntropy  float64 `json:"input_entropy"`
+				PackedSize    uint64  `json:"packed_size"`
+				Ratio         float64 `json:"ratio"`
+				HitRate       float64 `json:"hit_rate"`
+				LiteralChunks int     `json:"literal_chunks"`
+				TotalChunks   int     `json:"total_chunks"`
+				AvgSimilarity float64 `json:"avg_similarity"`
+				PackMs        int64   `json:"pack_ms"`
+				UnpackMs      int64   `json:"unpack_ms"`
+				Verify        string  `json:"verify"`
+				Runs          int     `json:"runs"`
+				Engine        string  `json:"engine"`
+			}
+
+			out := Output{
+				InputFile:    input,
+				InputSize:    uint64(len(inputBytes)),
+				InputEntropy: inputEntropy,
+				Runs:         runs,
+				Engine:       "V4",
+			}
+
+			var totalPack, totalUnpack time.Duration
+			var lastMetrics *cromlib.Metrics
+
+			for i := 0; i < runs; i++ {
+				cromFile, _ := os.CreateTemp("", "bench_crom_*")
+				restoredFile, _ := os.CreateTemp("", "bench_restored_*")
+				cromPath := cromFile.Name()
+				restoredPath := restoredFile.Name()
+				cromFile.Close()
+				restoredFile.Close()
+
+				metrics, err := cromlib.Pack(input, cromPath, codebookPath, cromlib.DefaultPackOptions())
+				if err != nil {
+					return fmt.Errorf("pack failed run %d: %v", i+1, err)
+				}
+				totalPack += metrics.Duration
+				lastMetrics = metrics
+
+				startUnpack := time.Now()
+				err = cromlib.Unpack(cromPath, restoredPath, codebookPath, cromlib.DefaultUnpackOptions())
+				if err != nil {
+					return fmt.Errorf("unpack failed run %d: %v", i+1, err)
+				}
+				totalUnpack += time.Since(startUnpack)
+
+				restoredBytes, _ := os.ReadFile(restoredPath)
+				if bytes.Equal(inputBytes, restoredBytes) {
+					out.Verify = "PASS"
+				} else {
+					out.Verify = "FAIL"
+				}
+
+				os.Remove(cromPath)
+				os.Remove(restoredPath)
+			}
+
+			if lastMetrics != nil {
+				out.PackedSize = lastMetrics.PackedSize
+				out.Ratio = float64(out.PackedSize) / float64(out.InputSize) * 100
+				out.HitRate = lastMetrics.HitRate
+				out.LiteralChunks = lastMetrics.LiteralChunks
+				out.TotalChunks = lastMetrics.TotalChunks
+				out.AvgSimilarity = lastMetrics.AvgSimilarity
+			}
+			out.PackMs = totalPack.Milliseconds() / int64(runs)
+			out.UnpackMs = totalUnpack.Milliseconds() / int64(runs)
+
+			if out.Verify != "PASS" {
+				return fmt.Errorf("verificação de integridade falhou")
+			}
+
+			jsonData, err := json.MarshalIndent(out, "", "  ")
+			if err != nil {
+				return err
+			}
+
+			if outputJson != "" {
+				if err := os.WriteFile(outputJson, jsonData, 0644); err != nil {
+					return err
+				}
+				fmt.Printf("Benchmark salvo em %s\n", outputJson)
+			} else {
+				fmt.Println(string(jsonData))
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&input, "input", "i", "", "Caminho do arquivo de entrada")
+	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Caminho do Codebook (.cromdb)")
+	cmd.Flags().StringVarP(&outputJson, "output-json", "o", "", "Caminho para salvar o JSON (opcional)")
+	cmd.Flags().IntVarP(&runs, "runs", "r", 1, "Número de iterações do benchmark")
 
 	return cmd
 }

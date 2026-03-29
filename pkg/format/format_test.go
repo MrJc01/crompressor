@@ -3,6 +3,7 @@ package format
 import (
 	"bytes"
 	"crypto/sha256"
+	"io"
 	"testing"
 )
 
@@ -33,10 +34,11 @@ func TestFormat_V1_Roundtrip(t *testing.T) {
 
 	// Read V1
 	reader := NewReader(&buf)
-	h2, _, entries2, compDeltaPool2, err := reader.Read("")
+	h2, _, entries2, rStream, err := reader.ReadStream("")
 	if err != nil {
-		t.Fatalf("Read failed: %v", err)
+		t.Fatalf("ReadStream error: %v", err)
 	}
+	compDeltaPool2, _ := io.ReadAll(rStream)
 
 	if h2.Version != header.Version {
 		t.Errorf("Header Version mismatch: got %d, want %d", h2.Version, header.Version)
@@ -96,10 +98,11 @@ func TestFormat_V2_Roundtrip(t *testing.T) {
 	}
 
 	reader := NewReader(&buf)
-	h2, bt2, entries2, pool2, err := reader.Read("")
+	h2, bt2, entries2, rStream2, err := reader.ReadStream("")
 	if err != nil {
-		t.Fatalf("Read failed: %v", err)
+		t.Fatalf("ReadStream error: %v", err)
 	}
+	pool2, _ := io.ReadAll(rStream2)
 
 	// Header checks
 	if h2.Version != Version2 {
@@ -166,16 +169,16 @@ func TestFormat_InvalidMagic(t *testing.T) {
 	copy(buf[0:4], "BAD!")
 
 	reader := NewReader(bytes.NewReader(buf))
-	_, _, _, _, err := reader.Read("")
+	_, _, _, _, err := reader.ReadStream("")
 	if err == nil {
-		t.Fatal("expected error for invalid magic")
+		t.Fatal("Expected error due to tiny size")
 	}
 }
 
 func TestFormat_TruncatedHeader(t *testing.T) {
 	buf := make([]byte, 20)
 	reader := NewReader(bytes.NewReader(buf))
-	_, _, _, _, err := reader.Read("")
+	_, _, _, _, err := reader.ReadStream("")
 	if err == nil {
 		t.Fatal("expected error for truncated header")
 	}
@@ -221,5 +224,61 @@ func TestFormat_V2_HeaderSerializeRoundtrip(t *testing.T) {
 	}
 	if h2.ChunkCount != 7813 {
 		t.Errorf("ChunkCount mismatch")
+	}
+}
+
+func TestFormat_V4_HeaderSerializeRoundtrip(t *testing.T) {
+	origHash := sha256.Sum256([]byte("integrity v4"))
+	salt := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+	cbHash := sha256.Sum256([]byte("codebook"))
+
+	h := &Header{
+		Version:       Version4,
+		IsEncrypted:   true,
+		IsPassthrough: true,
+		Salt:          salt,
+		OriginalHash:  origHash,
+		OriginalSize:  1_000_000,
+		ChunkCount:    7813,
+		ChunkSize:     512,
+	}
+	copy(h.CodebookHash[:], cbHash[:8])
+
+	data := h.Serialize()
+	if len(data) != HeaderSizeV4 {
+		t.Fatalf("serialized V4 header size: got %d, want %d", len(data), HeaderSizeV4)
+	}
+
+	h2, err := ParseHeader(data)
+	if err != nil {
+		t.Fatalf("ParseHeader failed: %v", err)
+	}
+
+	if h2.Version != Version4 {
+		t.Errorf("Version mismatch")
+	}
+	if !h2.IsEncrypted {
+		t.Errorf("IsEncrypted should be true")
+	}
+	if !h2.IsPassthrough {
+		t.Errorf("IsPassthrough should be true")
+	}
+	if h2.Salt != salt {
+		t.Errorf("Salt mismatch")
+	}
+	if h2.OriginalHash != origHash {
+		t.Errorf("OriginalHash mismatch")
+	}
+	if h2.OriginalSize != 1_000_000 {
+		t.Errorf("OriginalSize mismatch")
+	}
+	if h2.ChunkCount != 7813 {
+		t.Errorf("ChunkCount mismatch")
+	}
+	if h2.ChunkSize != 512 {
+		t.Errorf("ChunkSize mismatch: got %d, want 512", h2.ChunkSize)
+	}
+	if h2.CodebookHash != h.CodebookHash {
+		t.Errorf("CodebookHash mismatch")
 	}
 }

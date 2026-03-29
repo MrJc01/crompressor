@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/cespare/xxhash/v2"
@@ -65,27 +66,25 @@ func GenerateManifest(cromFile string, codebookPath string, encryptionKey string
 	defer cb.Close()
 
 	reader := format.NewReader(f)
-	header, blockTable, entries, compDeltaPool, err := reader.Read(encryptionKey)
+	header, blockTable, entries, rStream, err := reader.ReadStream(encryptionKey)
 	if err != nil {
-		return nil, fmt.Errorf("manifest: read format: %w", err)
+		return nil, fmt.Errorf("manifest: parse error in %s: %w", cromFile, err)
 	}
 
 	// Decompress all blocks to get the full uncompressed delta pool
 	var uncompressedPool []byte
 
-	if header.Version == format.Version2 {
+	if header.Version >= format.Version2 {
 		var derivedKey []byte
 		if header.IsEncrypted {
 			derivedKey = crypto.DeriveKey([]byte(encryptionKey), header.Salt[:])
 		}
 
-		offset := 0
 		for i, blockSize := range blockTable {
-			if offset+int(blockSize) > len(compDeltaPool) {
+			blockData := make([]byte, blockSize)
+			if _, err := io.ReadFull(rStream, blockData); err != nil {
 				return nil, fmt.Errorf("manifest: unexpected end of delta pool at block %d", i)
 			}
-			blockData := compDeltaPool[offset : offset+int(blockSize)]
-			offset += int(blockSize)
 
 			if header.IsEncrypted {
 				dec, err := crypto.Decrypt(derivedKey, blockData)
@@ -102,6 +101,7 @@ func GenerateManifest(cromFile string, codebookPath string, encryptionKey string
 			uncompressedPool = append(uncompressedPool, decompressed...)
 		}
 	} else {
+		compDeltaPool, _ := io.ReadAll(rStream)
 		uncompressedPool, err = delta.DecompressPool(compDeltaPool)
 		if err != nil {
 			return nil, fmt.Errorf("manifest: decompress delta pool: %w", err)

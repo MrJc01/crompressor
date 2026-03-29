@@ -13,6 +13,7 @@ import (
 
 	"github.com/MrJc01/crompressor/internal/chunker"
 	"github.com/MrJc01/crompressor/internal/codebook"
+	"github.com/MrJc01/crompressor/pkg/format"
 )
 
 // createTestCodebook generates a .cromdb file with patterns derived from the input data.
@@ -357,10 +358,151 @@ func TestPackUnpack_CDC(t *testing.T) {
 	packUnpackRoundtrip(t, data, "CDC_64B", opts)
 }
 
+func TestUnpack_CorruptBlock(t *testing.T) {
+	data := make([]byte, 1024*1024)
+	for i := range data {
+		data[i] = byte(i % 16) // Lower entropy to avoid passthrough
+	}
+
+	opts := DefaultPackOptions()
+	opts.ChunkSize = 128
+	cbPath := createTestCodebook(t, make([]byte, 128), opts.ChunkSize)
+
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "input.bin")
+	cromPath := filepath.Join(dir, "output.crom")
+	restoredPath := filepath.Join(dir, "restored.bin")
+
+	os.WriteFile(inputPath, data, 0644)
+	_, err := Pack(inputPath, cromPath, cbPath, opts)
+	if err != nil {
+		t.Fatalf("Pack failed: %v", err)
+	}
+
+	// Delta pool lives at the end. Let's flip the first byte of the zstd frame.
+	// We know the block table tells us where the delta pool starts, but we can just
+	// parse the header to find `baseOffset`.
+	cromData, _ := os.ReadFile(cromPath)
+	h, _, _, _ := format.NewReader(bytes.NewReader(cromData)).ReadMetadata("")
+	
+	// Corrupt a byte right after the chunk table (start of delta pool)
+	tableSize := int(h.ChunkCount) * format.EntrySize
+	if h.IsEncrypted { tableSize += 28 }
+	hSize := format.HeaderSizeV2
+	if h.Version == format.Version4 { hSize = format.HeaderSizeV4 }
+	baseOffset := hSize + 4 /* block table len 1 */ + tableSize
+	
+	if baseOffset < len(cromData) {
+		cromData[baseOffset] ^= 0xFF
+	}
+	os.WriteFile(cromPath, cromData, 0644)
+
+	// Strict Unpack -> should fail
+	strictOpts := DefaultUnpackOptions()
+	strictOpts.Strict = true
+	err = Unpack(cromPath, restoredPath, cbPath, strictOpts)
+	if err == nil {
+		t.Fatalf("Expected strict unpack to fail on corrupted block")
+	}
+
+	// Tolerant Unpack -> should pass but skipping the block
+	tolerantOpts := DefaultUnpackOptions()
+	tolerantOpts.Strict = false
+	err = Unpack(cromPath, restoredPath, cbPath, tolerantOpts)
+	if err != nil {
+		t.Fatalf("Expected tolerant unpack to succeed, but got error: %v", err)
+	}
+
+	restored, _ := os.ReadFile(restoredPath)
+	if len(restored) != len(data) {
+		t.Fatalf("Tolerant unpack didn't restore correct length (got %d, want %d)", len(restored), len(data))
+	}
+}
+
 func sizeLabel(size int) string {
 	if size < 1024 {
 		return string(rune('0'+size/100)) + string(rune('0'+(size%100)/10)) + string(rune('0'+size%10)) + "B"
 	}
 	kb := size / 1024
 	return string(rune('0'+kb/10)) + string(rune('0'+kb%10)) + "KB"
+}
+
+func TestPackUnpack_ThresholdRandom(t *testing.T) {
+	data := make([]byte, 1024)
+	// Fill with either 0x00 or 0xFF. Entropy = 1.0 bit/byte.
+	// Average distance from 0x00 is 128 * 4 = 512 bits... wait
+	// actually 0xFF is 8 bits distance! So 128 * 4 = 512 average distance.
+	// For similarity < 0.2, we need distance > 819. So we need mostly 0xFF!
+	for i := range data {
+		if mathrand.Float32() < 0.85 {
+			data[i] = 0xFF
+		} else {
+			data[i] = 0x00
+		}
+	}
+	// Entropy is very low (~0.6 bits), but distance from zero codebook is very high!
+	opts := DefaultPackOptions()
+	opts.Concurrency = 1
+
+	// Use a codebook of zeros so the random data is completely different
+	cbPath := createTestCodebook(t, make([]byte, 1024), opts.ChunkSize)
+
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "input.bin")
+	cromPath := filepath.Join(dir, "output.crom")
+	outputPath := filepath.Join(dir, "restored.bin")
+
+	os.WriteFile(inputPath, data, 0644)
+
+	metrics, err := Pack(inputPath, cromPath, cbPath, opts)
+	if err != nil {
+		t.Fatalf("Pack failed: %v", err)
+	}
+	if metrics.LiteralChunks == 0 {
+		t.Fatalf("Expected literal chunks > 0 for random data against zero codebook, got %d", metrics.LiteralChunks)
+	}
+
+	err = Unpack(cromPath, outputPath, cbPath, DefaultUnpackOptions())
+	if err != nil {
+		t.Fatalf("Unpack failed: %v", err)
+	}
+
+	restored, _ := os.ReadFile(outputPath)
+	if !bytes.Equal(data, restored) {
+		t.Fatalf("Data mismatch after unpacking literals")
+	}
+}
+
+func TestPackUnpack_ThresholdZeros(t *testing.T) {
+	data := make([]byte, 1024) // all zeros
+	opts := DefaultPackOptions()
+	opts.Concurrency = 1
+
+	// Use a codebook of zeros
+	cbPath := createTestCodebook(t, data, opts.ChunkSize)
+
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "input.bin")
+	cromPath := filepath.Join(dir, "output.crom")
+	outputPath := filepath.Join(dir, "restored.bin")
+
+	os.WriteFile(inputPath, data, 0644)
+
+	metrics, err := Pack(inputPath, cromPath, cbPath, opts)
+	if err != nil {
+		t.Fatalf("Pack failed: %v", err)
+	}
+	if metrics.LiteralChunks > 0 {
+		t.Fatalf("Expected 0 literal chunks for matching data, got %d", metrics.LiteralChunks)
+	}
+
+	err = Unpack(cromPath, outputPath, cbPath, DefaultUnpackOptions())
+	if err != nil {
+		t.Fatalf("Unpack failed: %v", err)
+	}
+
+	restored, _ := os.ReadFile(outputPath)
+	if !bytes.Equal(data, restored) {
+		t.Fatalf("Data mismatch after unpacking")
+	}
 }

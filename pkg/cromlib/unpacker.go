@@ -3,6 +3,7 @@ package cromlib
 import (
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"time"
@@ -17,17 +18,19 @@ import (
 type UnpackOptions struct {
 	Fuzziness     float64 // 0.0 = lossless, > 0 = variational clone
 	EncryptionKey string  // Passphrase for AES-256-GCM. If empty, uses no encryption.
+	Strict        bool    // If true, aborts on decompression errors; if false, skips corrupted blocks.
 }
 
 // DefaultUnpackOptions returns sensible defaults (lossless).
 func DefaultUnpackOptions() UnpackOptions {
 	return UnpackOptions{
 		Fuzziness: 0.0,
+		Strict:    false,
 	}
 }
 
 // Unpack reads a .crom file, extracts the deltas, looks up the codewords,
-// rebuilds the original file. If Fuzziness is 0, it verifies the SHA-256 hash perfectly.
+// rebuilds the original file directly to disk via streaming to prevent memory overflow.
 func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) error {
 	start := time.Now()
 
@@ -44,27 +47,81 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 	defer inFile.Close()
 
 	reader := format.NewReader(inFile)
-	header, blockTable, entries, compDeltaPool, err := reader.Read(opts.EncryptionKey)
+	header, blockTable, entries, rStream, err := reader.ReadStream(opts.EncryptionKey)
 	if err != nil {
 		return fmt.Errorf("unpack: parse format: %w", err)
 	}
 
-	var uncompressedPool []byte
+	outFile, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("unpack: open output file: %w", err)
+	}
+	defer outFile.Close()
 
-	if header.Version == format.Version2 {
+	hasher := sha256.New()
+	var writeOut func([]byte) error
+	if opts.Fuzziness > 0.0 {
+		// In variational mode, don't check hash
+		writeOut = func(b []byte) error { _, e := outFile.Write(b); return e }
+	} else {
+		// Standard lossless check
+		writeOut = func(b []byte) error {
+			_, e1 := outFile.Write(b)
+			_, e2 := hasher.Write(b)
+			if e1 != nil { return e1 }
+			return e2
+		}
+	}
+
+	corruptBlocks := 0
+	// PASSTHROUGH LOGIC (V3)
+	if header.IsPassthrough {
+		// The rest of the file is just the raw data or encrypted raw data
+		if header.IsEncrypted {
+			derivedKey := crypto.DeriveKey([]byte(opts.EncryptionKey), header.Salt[:])
+			encData, _ := io.ReadAll(rStream)
+			dec, err := crypto.Decrypt(derivedKey, encData)
+			if err != nil {
+				return fmt.Errorf("unpack: decrypt passthrough: %w", err)
+			}
+			if err := writeOut(dec); err != nil {
+				return err
+			}
+		} else {
+			if _, err := io.Copy(io.MultiWriter(outFile, hasher), rStream); err != nil {
+				return err
+			}
+		}
+		
+		reconstructedHash := hasher.Sum(nil)
+		if opts.Fuzziness == 0.0 {
+			var h [32]byte
+			copy(h[:], reconstructedHash)
+			if h != header.OriginalHash {
+				return fmt.Errorf("unpack: SECURITY/INTEGRITY FAILURE: reconstructed SHA-256 does not match original")
+			}
+		}
+		fmt.Printf("✔ Unpack (passthrough) completed in %v\n", time.Since(start))
+		return nil
+	}
+
+	maxID := cb.CodewordCount() - 1
+
+	if header.Version >= format.Version2 {
 		var derivedKey []byte
 		if header.IsEncrypted {
 			derivedKey = crypto.DeriveKey([]byte(opts.EncryptionKey), header.Salt[:])
 		}
 
-		offset := 0
+		currentGlobalOffset := uint64(0)
+		entryIdx := 0
+
+		// Stream block by block
 		for i, blockSize := range blockTable {
-			if offset+int(blockSize) > len(compDeltaPool) {
-				return fmt.Errorf("unpack: unexpected end of delta pool reading block %d (len(compDeltaPool)=%d, requested=%d)",
-					i, len(compDeltaPool), offset+int(blockSize))
+			blockData := make([]byte, blockSize)
+			if _, err := io.ReadFull(rStream, blockData); err != nil {
+				return fmt.Errorf("unpack: unexpected end of delta pool reading block %d: %w", i, err)
 			}
-			blockData := compDeltaPool[offset : offset+int(blockSize)]
-			offset += int(blockSize)
 
 			if header.IsEncrypted {
 				dec, err := crypto.Decrypt(derivedKey, blockData)
@@ -74,87 +131,155 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 				blockData = dec
 			}
 
-			uncompressedBlock, err := delta.DecompressPool(blockData)
-			if err != nil {
-				return fmt.Errorf("unpack: decompress block %d: %w", i, err)
+			var uncompressedBlock []byte
+			var decompressErr error
+			for retry := 0; retry < 3; retry++ {
+				uncompressedBlock, decompressErr = delta.DecompressPool(blockData)
+				if decompressErr == nil {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
 			}
 
-			uncompressedPool = append(uncompressedPool, uncompressedBlock...)
+			if decompressErr != nil {
+				if opts.Strict {
+					return fmt.Errorf("unpack: decompress block %d: %w", i, decompressErr)
+				}
+				fmt.Printf("[Warning] Failed to decompress block %d, skipping (tolerant mode): %v\n", i, decompressErr)
+				corruptBlocks++
+				
+				// Advance state to the next block
+				nextBlockIdx := (i + 1) * format.ChunksPerBlock
+				if nextBlockIdx < len(entries) {
+					currentGlobalOffset = entries[nextBlockIdx].DeltaOffset
+				}
+				
+				// Skip all entries in this corrupted block by writing zero-filled chunks to maintain output alignment
+				for entryIdx < len(entries) {
+					if entryIdx >= nextBlockIdx {
+						break
+					}
+					entry := entries[entryIdx]
+					emptyChunk := make([]byte, entry.OriginalSize)
+					outFile.Write(emptyChunk)
+					entryIdx++
+				}
+				continue
+			}
+
+			blockEndOffset := currentGlobalOffset + uint64(len(uncompressedBlock))
+			
+			// Process all chunk entries that fit perfectly inside this uncompressed block
+			for entryIdx < len(entries) {
+				entry := entries[entryIdx]
+				
+				// Reached an entry that lives in the next block
+				if entry.DeltaOffset >= blockEndOffset {
+					break
+				}
+				
+				localOffset := entry.DeltaOffset - currentGlobalOffset
+				endLocal := localOffset + uint64(entry.DeltaSize)
+				if endLocal > uint64(len(uncompressedBlock)) {
+					if opts.Strict {
+						return fmt.Errorf("unpack: delta offset bounds error for chunk in block %d", i)
+					}
+					// If not strict, zero-fill current and skip
+					fmt.Printf("[Warning] Invalid chunk boundaries in block %d, zero-filling\n", i)
+					outFile.Write(make([]byte, entry.OriginalSize))
+					corruptBlocks++
+					entryIdx++
+					continue
+				}
+				
+				res := uncompressedBlock[localOffset:endLocal]
+				
+				targetID := entry.CodebookID
+				var reconstructedChunk []byte
+
+				if targetID == format.LiteralCodebookID {
+					reconstructedChunk = res
+				} else {
+					if opts.Fuzziness > 0.0 {
+						spread := int(opts.Fuzziness * 100)
+						if spread < 1 { spread = 1 }
+						offset := uint64(rand.Intn(spread*2) - spread)
+						if targetID+offset <= maxID {
+							targetID += offset
+						}
+					}
+
+					pattern, err := cb.Lookup(targetID)
+					if err != nil {
+						return fmt.Errorf("unpack: lookup codeword %d: %w", targetID, err)
+					}
+
+					usablePattern := pattern
+					if uint32(len(usablePattern)) > entry.OriginalSize {
+						usablePattern = usablePattern[:entry.OriginalSize]
+					}
+					if uint32(len(res)) > entry.OriginalSize {
+						res = res[:entry.OriginalSize]
+					}
+
+					reconstructedChunk = delta.Apply(usablePattern, res)
+				}
+
+				if err := writeOut(reconstructedChunk); err != nil {
+					return fmt.Errorf("unpack: write chunk: %w", err)
+				}
+				
+				entryIdx++
+			}
+			
+			currentGlobalOffset = blockEndOffset
 		}
 	} else {
-		uncompressedPool, err = delta.DecompressPool(compDeltaPool)
-		if err != nil {
-			return fmt.Errorf("unpack: decompress delta pool: %w", err)
+		// V1 Legacy Support (Load full pool)
+		compDeltaPool, err := io.ReadAll(rStream)
+		if err != nil { return err }
+		uncompressedPool, err := delta.DecompressPool(compDeltaPool)
+		if err != nil { return err }
+		
+		for _, entry := range entries {
+			targetID := entry.CodebookID
+			endOffset := entry.DeltaOffset + uint64(entry.DeltaSize)
+			res := uncompressedPool[entry.DeltaOffset:endOffset]
+
+			var reconstructedChunk []byte
+			if targetID == format.LiteralCodebookID {
+				reconstructedChunk = res
+			} else {
+				pattern, err := cb.Lookup(targetID)
+				if err != nil { return err }
+
+				usablePattern := pattern
+				if uint32(len(usablePattern)) > entry.OriginalSize { usablePattern = usablePattern[:entry.OriginalSize] }
+				if uint32(len(res)) > entry.OriginalSize { res = res[:entry.OriginalSize] }
+				reconstructedChunk = delta.Apply(usablePattern, res)
+			}
+			if err := writeOut(reconstructedChunk); err != nil { return err }
 		}
 	}
 
-	reconstructed := make([]byte, 0, header.OriginalSize)
-	maxID := cb.CodewordCount() - 1
-
-	for i, entry := range entries {
-		targetID := entry.CodebookID
-
-		// Variational Clones: Introduce deliberate noise by selecting nearby codewords
-		if opts.Fuzziness > 0.0 {
-			spread := int(opts.Fuzziness * 100)
-			if spread < 1 {
-				spread = 1
-			}
-			offset := uint64(rand.Intn(spread*2) - spread)
-
-			if targetID+offset <= maxID {
-				targetID += offset
-			}
-		}
-
-		pattern, err := cb.Lookup(targetID)
-		if err != nil {
-			return fmt.Errorf("unpack: lookup codeword %d for chunk %d: %w", targetID, i, err)
-		}
-
-		endOffset := entry.DeltaOffset + uint64(entry.DeltaSize)
-		if endOffset > uint64(len(uncompressedPool)) {
-			return fmt.Errorf("unpack: delta offset bounds error for chunk %d", i)
-		}
-
-		res := uncompressedPool[entry.DeltaOffset:endOffset]
-
-		usablePattern := pattern
-		if uint32(len(usablePattern)) > entry.OriginalSize {
-			usablePattern = usablePattern[:entry.OriginalSize]
-		}
-		if uint32(len(res)) > entry.OriginalSize {
-			res = res[:entry.OriginalSize]
-		}
-
-		reconstructedChunk := delta.Apply(usablePattern, res)
-		reconstructed = append(reconstructed, reconstructedChunk...)
-	}
-
-	reconstructedHash := sha256.Sum256(reconstructed)
-
+	reconstructedHash := hasher.Sum(nil)
 	if opts.Fuzziness == 0.0 {
-		if reconstructedHash != header.OriginalHash {
-			return fmt.Errorf("unpack: SECURITY/INTEGRITY FAILURE: reconstructed SHA-256 (%x) does not match original (%x)",
-				reconstructedHash[:8], header.OriginalHash[:8])
+		var h [32]byte
+		copy(h[:], reconstructedHash)
+		if h != header.OriginalHash {
+			if !opts.Strict && corruptBlocks > 0 {
+				fmt.Printf("⚠ INTEGRITY MISMATCH: %d corrupted blocks were skipped.\n", corruptBlocks)
+			} else {
+				return fmt.Errorf("unpack: SECURITY/INTEGRITY FAILURE: reconstructed SHA-256 does not match original")
+			}
 		}
 	} else {
 		fmt.Printf("⚠ VARIATIONAL MODE ACTIVE (Fuzziness: %.2f)\n", opts.Fuzziness)
-		fmt.Printf("  Original Hash: %x\n", header.OriginalHash[:8])
-		fmt.Printf("  Clone Hash:    %x\n", reconstructedHash[:8])
-	}
-
-	if err := os.WriteFile(outputPath, reconstructed, 0644); err != nil {
-		return fmt.Errorf("unpack: write output: %w", err)
 	}
 
 	fmt.Printf("✔ Unpack completed in %v\n", time.Since(start))
-	if opts.Fuzziness == 0.0 {
+	if opts.Fuzziness == 0.0 && corruptBlocks == 0 {
 		fmt.Printf("  Integrity verified: SHA-256 match perfectly.\n")
-	} else {
-		fmt.Printf("  Variational clone generated successfully.\n")
 	}
-	fmt.Printf("  Restored output: %s (%d bytes)\n", outputPath, len(reconstructed))
-
 	return nil
 }

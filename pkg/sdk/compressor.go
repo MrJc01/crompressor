@@ -64,11 +64,14 @@ func (c *DefaultCompressor) Pack(ctx context.Context, cmd PackCommand) (<-chan P
 		}
 
 		result := map[string]interface{}{
-			"original": metrics.OriginalSize,
-			"packed":   metrics.PackedSize,
-			"hitRate":  metrics.HitRate,
-			"duration": time.Since(start).String(),
-			"ratio":    fmt.Sprintf("%.1f%%", float64(metrics.PackedSize)/float64(metrics.OriginalSize)*100),
+			"original":       metrics.OriginalSize,
+			"packed":         metrics.PackedSize,
+			"hitRate":        metrics.HitRate,
+			"literalChunks":  metrics.LiteralChunks,
+			"totalChunks":    metrics.TotalChunks,
+			"avgSimilarity":  metrics.AvgSimilarity,
+			"duration":       time.Since(start).String(),
+			"ratio":          fmt.Sprintf("%.1f%%", float64(metrics.PackedSize)/float64(metrics.OriginalSize)*100),
 		}
 
 		if c.eventBus != nil {

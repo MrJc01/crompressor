@@ -1,4 +1,4 @@
-# 🧪 Pesquisa e Viabilidade Técnica: Crompressor V2
+# 🧪 Pesquisa e Viabilidade Técnica: Crompressor V3
 
 Este arquivo é o ponto central de auditoria para todos os experimentos de compressão soberana.
 

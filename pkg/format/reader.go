@@ -36,11 +36,15 @@ func (cr *Reader) ReadMetadata(encryptionKey string) (*Header, []uint32, []Chunk
 		if _, err := io.ReadFull(cr.r, headerBuf[6:]); err != nil {
 			return nil, nil, nil, fmt.Errorf("format: read v1 header: %w", err)
 		}
-	} else if version == Version2 {
-		headerBuf = make([]byte, HeaderSizeV2)
+	} else if version == Version2 || version == Version3 || version == Version4 {
+		size := HeaderSizeV2
+		if version == Version4 {
+			size = HeaderSizeV4
+		}
+		headerBuf = make([]byte, size)
 		copy(headerBuf, metaBuf)
 		if _, err := io.ReadFull(cr.r, headerBuf[6:]); err != nil {
-			return nil, nil, nil, fmt.Errorf("format: read v2 header: %w", err)
+			return nil, nil, nil, fmt.Errorf("format: read v%d header: %w", version, err)
 		}
 	} else {
 		return nil, nil, nil, fmt.Errorf("format: unsupported version %d", version)
@@ -59,9 +63,9 @@ func (cr *Reader) ReadMetadata(encryptionKey string) (*Header, []uint32, []Chunk
 		derivedKey = crypto.DeriveKey([]byte(encryptionKey), header.Salt[:])
 	}
 
-	// 2. Read Block Table (V2 only)
+	// 2. Read Block Table (V2/V3 only)
 	var blockTable []uint32
-	if header.Version == Version2 {
+	if header.Version >= Version2 {
 		numBlocks := header.NumBlocks()
 		blockTableSize := int(numBlocks) * 4
 		blockBuf := make([]byte, blockTableSize)
@@ -105,18 +109,11 @@ func (cr *Reader) ReadMetadata(encryptionKey string) (*Header, []uint32, []Chunk
 	return header, blockTable, entries, nil
 }
 
-// Read parses the .crom file sequentially, returning Header, BlockTable (if V2), Chunk Table, and Delta Pool.
-func (cr *Reader) Read(encryptionKey string) (*Header, []uint32, []ChunkEntry, []byte, error) {
+// ReadStream returns the underlying reader positioned exactly at the start of the compressed delta pool.
+func (cr *Reader) ReadStream(encryptionKey string) (*Header, []uint32, []ChunkEntry, io.Reader, error) {
 	header, blockTable, entries, err := cr.ReadMetadata(encryptionKey)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-
-	// 4. Read compressed Delta Pool (read to EOF)
-	compDeltaPool, err := io.ReadAll(cr.r)
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("format: read delta pool: %w", err)
-	}
-
-	return header, blockTable, entries, compDeltaPool, nil
+	return header, blockTable, entries, cr.r, nil
 }

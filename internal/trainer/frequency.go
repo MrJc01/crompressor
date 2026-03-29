@@ -48,6 +48,27 @@ func (ft *FrequencyTable) Record(data []byte) {
 	}
 }
 
+// RecordWithCount registers a chunk pattern with a specific initial count.
+// Used by incremental training to seed existing patterns with a boost.
+func (ft *FrequencyTable) RecordWithCount(data []byte, count uint32) {
+	h := xxhash.Sum64(data)
+
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+
+	if entry, ok := ft.entries[h]; ok {
+		entry.Count += count
+	} else {
+		cp := make([]byte, len(data))
+		copy(cp, data)
+		ft.entries[h] = &PatternEntry{
+			Hash:  h,
+			Count: count,
+			Data:  cp,
+		}
+	}
+}
+
 // Len returns the number of unique patterns recorded.
 func (ft *FrequencyTable) Len() int {
 	ft.mu.Lock()
