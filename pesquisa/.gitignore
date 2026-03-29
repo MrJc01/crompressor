@@ -16,6 +16,7 @@
 !03-vfs_mount_perf/
 !04-p2p_soberania/
 !05-tco_storage_frio/
+!06-image_format_analysis/
 
 # 🚫 Ignorar dados binários e logs dentro das pastas de teste
 01-logs_redundancia/*
@@ -28,6 +29,10 @@
 !04-p2p_soberania/*.md
 05-tco_storage_frio/*
 !05-tco_storage_frio/*.md
+06-image_format_analysis/*
+!06-image_format_analysis/*.md
+!06-image_format_analysis/scripts/
+!06-image_format_analysis/scripts/*.sh
 
 # 🚫 Ignorar datasets reais (apenas README nestas pastas)
 datasets/*

@@ -42,6 +42,11 @@ Este repositório contém as evidências de laboratório coletadas para atestar 
 ### [Teste 05] TCO em Escala
 - **Projeção**: Em 1PB de dados, o Crompressor evita o custo de **$18k/mês** em tarifas de storage em nuvem.
 
+### [Teste 06] Análise de Formatos de Imagens (Universalidade)
+- **Cenário**: Compressão de 7 formatos visuais (BMP, PNG, JPG, WebP, GIF, TIFF, SVG) com validação de inferência zero-shot via Cérebro Universal.
+- **Resultado**: Formatos descompactados/vetoriais como BMP, TIFF e SVG exibiram até **81% de saving** com alta generalização.
+- **Diferencial**: O Crompressor não se limita a dados textuais; ele abstrai padrões matemáticos puros em binários complexos, validando sua eficácia como infraestrutura unificada.
+
 ---
 
 ## 🚀 Como Replicar
