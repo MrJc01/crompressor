@@ -200,3 +200,45 @@ func BenchmarkFixedChunker_1MB(b *testing.B) {
 		fc.Split(data)
 	}
 }
+
+func TestCDCInsertion(t *testing.T) {
+	// Generate 100KB of random data
+	data := make([]byte, 100*1024)
+	rand.Read(data)
+
+	fc := NewFastCDCChunker(128)
+	chunks1 := fc.Split(data)
+
+	// Insert 1 byte at position 500
+	mutated := make([]byte, 0, len(data)+1)
+	mutated = append(mutated, data[:500]...)
+	mutated = append(mutated, 0xFF)
+	mutated = append(mutated, data[500:]...)
+
+	chunks2 := fc.Split(mutated)
+
+	// We expect the vast majority of chunks to remain identical
+	// Let's count matching chunk hashes
+	hashes1 := make(map[uint64]bool)
+	for _, c := range chunks1 {
+		hashes1[c.Hash] = true
+	}
+
+	matchCount := 0
+	for _, c := range chunks2 {
+		if hashes1[c.Hash] {
+			matchCount++
+		}
+	}
+
+	// Calculate percentage of matching chunks
+	matchRatio := float64(matchCount) / float64(len(chunks1))
+	
+	// FastCDC should preserve at least 95% of the chunks after a single byte insertion
+	if matchRatio < 0.95 {
+		t.Fatalf("FastCDC failed to resist byte shifting. Match ratio: %.2f%% (Expected >95%%)", matchRatio*100)
+	}
+	
+	t.Logf("FastCDC byte-shift resistance: %.2f%% chunks intact", matchRatio*100)
+}
+

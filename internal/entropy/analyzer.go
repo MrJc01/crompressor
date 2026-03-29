@@ -64,3 +64,25 @@ func IsPassthroughRequired(entropy float64, buf []byte) bool {
 
 	return false
 }
+
+// Shannon quickly calculates the entropy of an in-memory byte slice.
+func Shannon(data []byte) float64 {
+	if len(data) == 0 {
+		return 0.0
+	}
+	
+	freq := make(map[byte]int)
+	for _, b := range data {
+		freq[b]++
+	}
+
+	entropy := 0.0
+	length := float64(len(data))
+	for _, count := range freq {
+		p := float64(count) / length
+		entropy -= p * math.Log2(p)
+	}
+
+	return entropy
+}
+

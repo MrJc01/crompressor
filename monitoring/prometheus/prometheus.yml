@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'crompressor'
+    static_configs:
+      - targets: ['host.docker.internal:9099']
+        # Fallback to localhost binding if host.docker.internal is not resolver
+        # or use host networking on linux
+        labels:
+          node: 'crom_master'

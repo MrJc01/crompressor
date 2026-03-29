@@ -15,6 +15,7 @@ import (
 	"github.com/MrJc01/crompressor/internal/chunker"
 	"github.com/MrJc01/crompressor/internal/codebook"
 	"github.com/MrJc01/crompressor/internal/delta"
+	"github.com/MrJc01/crompressor/internal/entropy"
 	"github.com/MrJc01/crompressor/internal/merkle"
 	"github.com/MrJc01/crompressor/internal/search"
 	"github.com/MrJc01/crompressor/pkg/format"
@@ -42,7 +43,7 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 		chunkSize = 128
 	}
 	if opts.UseCDC {
-		fc = chunker.NewCDCChunker(chunkSize)
+		fc = chunker.NewFastCDCChunker(chunkSize)
 	} else {
 		fc = chunker.NewFixedChunker(chunkSize)
 	}
@@ -106,6 +107,22 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 					defer wg.Done()
 					for i := range jobs {
 						c := chunks[i]
+						
+						// EXPERT ROUTING: Entropy-based Passthrough
+						chunkEntropy := entropy.Shannon(c.Data)
+						if chunkEntropy > 7.8 {
+							results[i] = processedChunk{
+								entry: format.ChunkEntry{
+									CodebookID:   format.LiteralCodebookID,
+									DeltaSize:    uint32(len(c.Data)),
+									OriginalSize: uint32(len(c.Data)),
+								},
+								res: c.Data,
+								sim: 0.0,
+							}
+							continue
+						}
+
 						match, err := searcher.FindBestMatch(c.Data)
 						if err != nil {
 							results[i] = processedChunk{err: err}

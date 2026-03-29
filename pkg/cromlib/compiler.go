@@ -212,7 +212,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	searcher := search.NewLSHSearcher(cb)
 	var fc chunker.Chunker
 	if opts.UseCDC {
-		fc = chunker.NewCDCChunker(opts.ChunkSize)
+		fc = chunker.NewFastCDCChunker(opts.ChunkSize)
 	} else {
 		fc = chunker.NewFixedChunker(opts.ChunkSize)
 	}
@@ -308,6 +308,23 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 					defer wg.Done()
 					for i := range jobs {
 						chunk := chunks[i]
+						
+						// EXPERT ROUTING: Entropy-based Passthrough
+						chunkEntropy := entropy.Shannon(chunk.Data)
+						if chunkEntropy > 7.8 {
+							// Passthrough High-Entropy Chunk (Treat as Literal immediately)
+							results[i] = processedChunk{
+								res: chunk.Data,
+								sim: 0.0, // Irrelevant for literals
+								entry: format.ChunkEntry{
+									CodebookID:   format.LiteralCodebookID,
+									DeltaSize:    uint32(len(chunk.Data)),
+									OriginalSize: uint32(chunk.Size),
+								},
+							}
+							continue
+						}
+
 						match, err := searcher.FindBestMatch(chunk.Data)
 						if err != nil {
 							results[i] = processedChunk{err: err}

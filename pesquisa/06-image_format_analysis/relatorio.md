@@ -6,8 +6,8 @@ interagem com o sistema de compressão do Crompressor (codebooks/cérebros).
 - **Formatos Testados**: BMP, PNG, JPEG, WebP, GIF, TIFF, SVG
 - **Cérebros Treinados**: 7 específicos + 1 universal
 - **Total de Combinações**: ~77 testes com verificação SHA-256
-- **Data da Auditoria**: 2026-03-29 20:06
-- **Status de Integridade**: ⚠️ 1401/1503 PASS
+- **Data da Auditoria**: 2026-03-29 20:49
+- **Status de Integridade**: ⚠️ 1681/1783 PASS
 
 ---
 
@@ -31,14 +31,14 @@ Dataset controlado gerado via ImageMagick: mesmas imagens-fonte convertidas para
 
 | Cérebro | Formato | Tempo (ms) | Tamanho (.cromdb) |
 |:--------|:--------|:-----------|:------------------|
-| **brain_bmp** | bmp | 596ms | 1.00 MB |
-| **brain_png** | png | 174ms | 1.00 MB |
-| **brain_jpg** | jpg | 127ms | 1.00 MB |
-| **brain_webp** | webp | 212ms | 1.00 MB |
-| **brain_gif** | gif | 172ms | 1.00 MB |
-| **brain_tiff** | tiff | 412ms | 1.00 MB |
-| **brain_svg** | svg | 83ms | 1.00 MB |
-| **brain_universal** | universal | 937ms | 1.00 MB |
+| **brain_bmp** | bmp | 565ms | 1.00 MB |
+| **brain_png** | png | 275ms | 1.00 MB |
+| **brain_jpg** | jpg | 119ms | 1.00 MB |
+| **brain_webp** | webp | 186ms | 1.00 MB |
+| **brain_gif** | gif | 166ms | 1.00 MB |
+| **brain_tiff** | tiff | 471ms | 1.00 MB |
+| **brain_svg** | svg | 153ms | 1.00 MB |
+| **brain_universal** | universal | 897ms | 1.00 MB |
 
 ---
 
@@ -48,13 +48,13 @@ Dataset controlado gerado via ImageMagick: mesmas imagens-fonte convertidas para
 
 | Formato | Tam. Original (Méd.) | Tam. CROM (Méd.) | Ratio (%) | Economia (%) | Verify |
 |:--------|:---------------------|:-----------------|:----------|:-------------|:-------|
-| **bmp** | 1.03 MB | 829.98 KB | 78,15% | **21,85%** | ⚠️ MIXED |
+| **bmp** | 1.03 MB | 829.91 KB | 78,17% | **21,82%** | ⚠️ MIXED |
 | **png** | 367.91 KB | 368.01 KB | 100,00% | **0,00%** | ⚠️ MIXED |
-| **jpg** | 45.52 KB | 42.80 KB | 91,47% | **8,53%** | ⚠️ MIXED |
+| **jpg** | 45.52 KB | 42.75 KB | 91,10% | **8,90%** | ⚠️ MIXED |
 | **webp** | 178.66 KB | 178.77 KB | 100,00% | **0,00%** | ⚠️ MIXED |
-| **gif** | 177.86 KB | 179.53 KB | 100,50% | **-0,50%** | ⚠️ MIXED |
-| **tiff** | 1002.27 KB | 796.54 KB | 79,62% | **20,38%** | ⚠️ MIXED |
-| **svg** | 60.92 KB | 40.54 KB | 65,20% | **34,80%** | ⚠️ MIXED |
+| **gif** | 177.86 KB | 179.35 KB | 100,42% | **-0,42%** | ⚠️ MIXED |
+| **tiff** | 1002.27 KB | 796.62 KB | 79,70% | **20,30%** | ⚠️ MIXED |
+| **svg** | 60.92 KB | 40.51 KB | 65,17% | **34,83%** | ⚠️ MIXED |
 
 ---
 
@@ -66,13 +66,13 @@ Dataset controlado gerado via ImageMagick: mesmas imagens-fonte convertidas para
 
 | FMT↓ BR→ | **bmp** | **png** | **jpg** | **webp** | **gif** | **tiff** | **svg** |
 |:---------|:------|:------|:------|:------|:------|:------|:------|
-| **bmp** | **5862%** | 8071% | 10357% | 9674% | 9062% | 7514% | 9123% |
-| **png** | 74% | **157%** | 196% | 313% | 197% | 122% | 144% |
-| **jpg** | 796% | 491% | **610%** | 402% | 541% | 306% | 280% |
-| **webp** | 37% | 77% | 46% | **70%** | 41% | 50% | 57% |
-| **gif** | 48% | 52% | 37% | 39% | **48%** | 81% | 38% |
-| **tiff** | 7200% | 6021% | 6580% | 5483% | 6169% | **5987%** | 6646% |
-| **svg** | 526% | 444% | 492% | 501% | 412% | 774% | **268%** |
+| **bmp** | **4613%** | 5236% | 5171% | 4537% | 5107% | 4398% | 4910% |
+| **png** | 58% | **34%** | 38% | 36% | 36% | 46% | 34% |
+| **jpg** | 230% | 219% | **136%** | 247% | 170% | 265% | 194% |
+| **webp** | 35% | 35% | 27% | **34%** | 28% | 48% | 33% |
+| **gif** | 28% | 34% | 27% | 58% | **35%** | 29% | 27% |
+| **tiff** | 4773% | 4999% | 4443% | 3997% | 4065% | **4816%** | 4813% |
+| **svg** | 278% | 242% | 279% | 231% | 211% | 244% | **214%** |
 
 ---
 
@@ -82,13 +82,13 @@ Dataset controlado gerado via ImageMagick: mesmas imagens-fonte convertidas para
 
 | Formato | Ratio Treino (%) | Ratio Inferência (%) | Degradação (%) | Generaliza? |
 |:--------|:-----------------|:---------------------|:---------------|:------------|
-| **bmp** | 78,00% | 91,10% | 15,00% | 🔴 NÃO (>50%) |
+| **bmp** | 78,00% | 91,10% | 17,00% | 🔴 NÃO (>50%) |
 | **png** | 100,00% | 100,00% | 0,00% | 🔴 NÃO (>50%) |
-| **jpg** | 91,00% | 103,60% | 47,00% | 🔴 NÃO (>50%) |
+| **jpg** | 91,00% | 103,60% | 10,00% | 🔴 NÃO (>50%) |
 | **webp** | 100,00% | 100,00% | 0,00% | 🔴 NÃO (>50%) |
-| **gif** | 100,00% | 101,80% | 50,00% | 🔴 NÃO (>50%) |
-| **tiff** | 79,00% | 89,20% | 62,00% | 🔴 NÃO (>50%) |
-| **svg** | 65,00% | 103,60% | 20,00% | 🔴 NÃO (>50%) |
+| **gif** | 100,00% | 101,80% | 42,00% | 🔴 NÃO (>50%) |
+| **tiff** | 79,00% | 89,20% | 70,00% | 🔴 NÃO (>50%) |
+| **svg** | 65,00% | 103,70% | 17,00% | 🔴 NÃO (>50%) |
 
 ---
 
@@ -98,36 +98,36 @@ Dataset controlado gerado via ImageMagick: mesmas imagens-fonte convertidas para
 
 | Formato | Ratio Universal (%) | Ratio Especialista (%) | Penalty (pp) | Veredicto |
 |:--------|:--------------------|:-----------------------|:-------------|:----------|
-| **bmp** | 83,12% | 78,00% | 15,00pp | 🔴 Use Especialista |
+| **bmp** | 83,02% | 78,00% | 17,00pp | 🔴 Use Especialista |
 | **png** | 100,00% | 100,00% | 0,00pp | 🔴 Use Especialista |
-| **jpg** | 103,94% | 91,00% | 47,00pp | 🔴 Use Especialista |
+| **jpg** | 103,94% | 91,00% | 10,00pp | 🔴 Use Especialista |
 | **webp** | 100,00% | 100,00% | 0,00pp | 🔴 Use Especialista |
-| **gif** | 101,44% | 100,00% | 50,00pp | 🔴 Use Especialista |
-| **tiff** | 83,82% | 79,00% | 62,00pp | 🔴 Use Especialista |
-| **svg** | 102,40% | 65,00% | 20,00pp | 🔴 Use Especialista |
+| **gif** | 101,44% | 100,00% | 42,00pp | 🔴 Use Especialista |
+| **tiff** | 83,76% | 79,00% | 70,00pp | 🔴 Use Especialista |
+| **svg** | 101,92% | 65,00% | 17,00pp | 🔴 Use Especialista |
 
 ---
 
 ## 🧪 7. Validação de Hipóteses
 
 ### H1: Formatos brutos (BMP/TIFF) comprimem melhor
-- BMP saving: **21,85%** | TIFF saving: **20,38%**
-- JPG saving: **8,53%** | PNG saving: **0,00%**
+- BMP saving: **21,82%** | TIFF saving: **20,30%**
+- JPG saving: **8,90%** | PNG saving: **0,00%**
 - **Resultado: ❌ REFUTADA** — Formatos comprimidos também são bem comprimidos pelo CROM.
 
 ### H2: JPEG/WebP (pré-comprimidos) têm desempenho inferior
-- JPEG saving: **8,53%** | WebP saving: **0,00%**
-- BMP saving: **21,85%** (referência raw)
+- JPEG saving: **8,90%** | WebP saving: **0,00%**
+- BMP saving: **21,82%** (referência raw)
 - **Resultado: ❌ REFUTADA** — O CROM encontra padrões mesmo em dados pré-comprimidos.
 
 ### H3: Cross-format penalty é significativo
-- Saving médio nativo (diagonal): **1857,43%**
-- Saving médio cruzado (off-diagonal): **2369,38%**
+- Saving médio nativo (diagonal): **1411,71%**
+- Saving médio cruzado (off-diagonal): **1426,57%**
 - Cross-format penalty: **pp**
 - **Resultado: ❌ REFUTADA** — O penalty cruzado é menor que 10pp, aceitável.
 
 ### H4: Imagens novas mantêm ≥70% da taxa do treino
-- Degradação média pós-treino: **27,71%**
+- Degradação média pós-treino: **22,29%**
 - **Resultado: ❌ REFUTADA** — O cérebro tem dificuldade para generalizar (degradação > 30%).
 
 ---
