@@ -27,13 +27,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/MrJc01/crompressor/internal/autobrain"
 	"github.com/MrJc01/crompressor/internal/entropy"
+	"github.com/MrJc01/crompressor/internal/metrics"
 	"github.com/MrJc01/crompressor/internal/network"
 	"github.com/MrJc01/crompressor/internal/trainer"
 	"github.com/MrJc01/crompressor/internal/vfs"
 	"github.com/MrJc01/crompressor/pkg/cromlib"
 	"github.com/MrJc01/crompressor/pkg/format"
 	cromsync "github.com/MrJc01/crompressor/pkg/sync"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
@@ -96,6 +99,9 @@ de arquivos .crom na pasta data-dir.`,
 			fmt.Printf("║  Data Dir:  %-29s ║\n", dataDir)
 			fmt.Printf("║  Port:      %-29d ║\n", listenPort)
 			fmt.Println("╚═══════════════════════════════════════════╝")
+
+			// Initialize Prometheus Metrics
+			metrics.InitCromMetrics()
 
 			// Initialize CromNode
 			node, err := network.NewCromNode(codebookPath, listenPort, dataDir, encKey)
@@ -160,6 +166,8 @@ de arquivos .crom na pasta data-dir.`,
 				}
 				fmt.Fprintf(w, "{\"status\": \"shared\"}")
 			})
+
+			http.Handle("/metrics", promhttp.Handler())
 
 			go func() {
 				if err := http.ListenAndServe("127.0.0.1:9099", nil); err != nil {
@@ -302,14 +310,35 @@ func packCmd() *cobra.Command {
 	var concurrency, chunkSize int
 	var useCDC bool
 	var encryptionKey string
+	var autoBrain bool
+	var brainDir string
 
 	cmd := &cobra.Command{
 		Use:   "pack",
 		Short: "Compila (comprime) um arquivo usando o Codebook",
 		Long:  `Divide o arquivo em chunks, busca padrões no Codebook e gera um arquivo .crom compacto.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if input == "" || output == "" || codebookPath == "" {
-				return fmt.Errorf("flags --input, --output e --codebook são obrigatórias")
+			if input == "" || output == "" {
+				return fmt.Errorf("flags --input e --output são obrigatórias")
+			}
+			
+			var det *autobrain.DetectionResult
+			if autoBrain {
+				if codebookPath != "" {
+					return fmt.Errorf("--auto-brain e --codebook não podem ser usados juntos")
+				}
+				router, err := autobrain.NewBrainRouter(brainDir)
+				if err != nil {
+					return fmt.Errorf("falha ao inicializar auto-brain: %w", err)
+				}
+				cb, result, err := router.SelectBrain(input)
+				if err != nil {
+					return fmt.Errorf("falha ao selecionar cérebro automaticamente: %w", err)
+				}
+				codebookPath = cb
+				det = result
+			} else if codebookPath == "" {
+				return fmt.Errorf("flag --codebook é obrigatória caso --auto-brain não seja fornecido")
 			}
 
 			fmt.Println("╔═══════════════════════════════════════════╗")
@@ -317,7 +346,12 @@ func packCmd() *cobra.Command {
 			fmt.Println("╠═══════════════════════════════════════════╣")
 			fmt.Printf("║  Input:    %-30s ║\n", input)
 			fmt.Printf("║  Output:   %-30s ║\n", output)
-			fmt.Printf("║  Codebook: %-30s ║\n", codebookPath)
+			if autoBrain {
+				fmt.Printf("║  AutoBrain: %-29s ║\n", det.Category)
+				fmt.Printf("║   ↳ Codebook: %-27s ║\n", filepath.Base(codebookPath))
+			} else {
+				fmt.Printf("║  Codebook: %-30s ║\n", codebookPath)
+			}
 			if encryptionKey != "" {
 				fmt.Printf("║  Security: AES-256-GCM Enabled            ║\n")
 			}
@@ -374,6 +408,8 @@ func packCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&input, "input", "i", "", "Caminho do arquivo de entrada")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Caminho do arquivo .crom de saída")
 	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Caminho do Codebook (.cromdb)")
+	cmd.Flags().BoolVar(&autoBrain, "auto-brain", false, "Seleciona o codebook automaticamente baseado no conteúdo do arquivo")
+	cmd.Flags().StringVar(&brainDir, "brain-dir", filepath.Join(os.Getenv("HOME"), ".crompressor", "brains"), "Diretório contendo codebooks para Auto-Brain")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "Número de goroutines para processamento paralelo")
 	cmd.Flags().IntVarP(&chunkSize, "chunk-size", "k", 0, "Tamanho base dos chunks (0 = auto)")
 	cmd.Flags().BoolVar(&useCDC, "cdc", false, "Habilitar Content-Defined Chunking")

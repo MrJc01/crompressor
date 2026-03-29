@@ -11,6 +11,7 @@ import (
 	"github.com/MrJc01/crompressor/internal/codebook"
 	"github.com/MrJc01/crompressor/internal/crypto"
 	"github.com/MrJc01/crompressor/internal/delta"
+	"github.com/MrJc01/crompressor/internal/metrics"
 	"github.com/MrJc01/crompressor/pkg/format"
 )
 
@@ -276,6 +277,8 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 	} else {
 		fmt.Printf("⚠ VARIATIONAL MODE ACTIVE (Fuzziness: %.2f)\n", opts.Fuzziness)
 	}
+
+	metrics.RecordUnpack(corruptBlocks)
 
 	fmt.Printf("✔ Unpack completed in %v\n", time.Since(start))
 	if opts.Fuzziness == 0.0 && corruptBlocks == 0 {

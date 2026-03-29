@@ -15,6 +15,8 @@ import (
 	"github.com/MrJc01/crompressor/internal/crypto"
 	"github.com/MrJc01/crompressor/internal/delta"
 	"github.com/MrJc01/crompressor/internal/entropy"
+	"github.com/MrJc01/crompressor/internal/merkle"
+	"github.com/MrJc01/crompressor/internal/metrics"
 	"github.com/MrJc01/crompressor/internal/search"
 	"github.com/MrJc01/crompressor/pkg/format"
 )
@@ -113,7 +115,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 
 	// 2. Setup Header
 	header := &format.Header{
-		Version:       format.Version4,
+		Version:       format.Version5, // Merkle sync capable
 		OriginalSize:  originalSize,
 		ChunkCount:    numEstimatedChunks,
 		IsPassthrough: isPassthrough,
@@ -166,10 +168,14 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		outFile.Write(header.Serialize())
 		
 		packedInfo, _ := outFile.Stat()
+		packedSize := uint64(packedInfo.Size())
+		duration := time.Since(start)
+		metrics.RecordPack(originalSize, packedSize, duration)
+		
 		return &Metrics{
 			OriginalSize: originalSize,
-			PackedSize:   uint64(packedInfo.Size()),
-			Duration:     time.Since(start),
+			PackedSize:   packedSize,
+			Duration:     duration,
 			HitRate:      100,
 		}, nil
 	}
@@ -211,6 +217,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 
 	var finalEntries []format.ChunkEntry
 	var blockTable []uint32
+	var blockHashes [][]byte
 
 	currentOffset := uint64(0)
 	buf := make([]byte, BlockSize)
@@ -342,6 +349,8 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 			}
 
 			blockTable = append(blockTable, uint32(len(compBlock)))
+			h := sha256.Sum256(compBlock)
+			blockHashes = append(blockHashes, h[:])
 
 			if _, err := outFile.Write(compBlock); err != nil {
 				return nil, err
@@ -359,7 +368,14 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	// 4. Finalize — Update header with REAL chunk count (may differ from estimate)
 	actualChunkCount := uint32(len(finalEntries))
 	header.ChunkCount = actualChunkCount
+	header.Version = format.Version5
 	copy(header.OriginalHash[:], hasher.Sum(nil))
+
+	if len(blockHashes) > 0 {
+		mTree := merkle.BuildFromHashes(blockHashes)
+		root := mTree.Root()
+		copy(header.MerkleRoot[:], root[:])
+	}
 
 	tableData := format.SerializeChunkTable(finalEntries)
 	if header.IsEncrypted {
@@ -425,10 +441,15 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		avgSim = totalSimilarity / float64(totalChunks)
 	}
 
+	packedSize := uint64(packedInfo.Size())
+	duration := time.Since(start)
+	
+	metrics.RecordPack(originalSize, packedSize, duration)
+
 	return &Metrics{
 		OriginalSize:  originalSize,
-		PackedSize:    uint64(packedInfo.Size()),
-		Duration:      time.Since(start),
+		PackedSize:    packedSize,
+		Duration:      duration,
 		HitRate:       (float64(hitCount) / float64(actualChunkCount)) * 100,
 		LiteralChunks: literalCount,
 		TotalChunks:   totalChunks,
