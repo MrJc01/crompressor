@@ -32,7 +32,7 @@ for fmt in "${FORMATS[@]}"; do
         ls "$dir"/* > /dev/null 2>&1 || continue
         
         files=("$dir/"*)
-        for src in "${files[@]:0:2}"; do
+        for src in "${files[@]}"; do
             [ -f "$src" ] || continue
             BASENAME=$(basename "$src")
             CROM_OUT="$OUT_DIR/${fmt}_univ_${split}_${BASENAME}.crom"

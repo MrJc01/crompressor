@@ -24,7 +24,7 @@ for fmt in "${FORMATS[@]}"; do
     log_info "Testando formato $fmt com brain_${fmt}..."
     
     files=("$DATASETS/${fmt}/train/"*)
-    for src in "${files[@]:0:2}"; do
+    for src in "${files[@]}"; do
         [ -f "$src" ] || continue
         BASENAME=$(basename "$src")
         CROM_OUT="$OUT_DIR/${fmt}_${BASENAME}.crom"

@@ -28,7 +28,7 @@ for fmt in "${FORMATS[@]}"; do
     log_info "Testando inferência para $fmt (baseline treino: ${TRAIN_AVG_RATIO}%)..."
     
     files=("$TEST_DIR/"*)
-    for src in "${files[@]:0:2}"; do
+    for src in "${files[@]}"; do
         [ -f "$src" ] || continue
         BASENAME=$(basename "$src")
         CROM_OUT="$OUT_DIR/${fmt}_infer_${BASENAME}.crom"
