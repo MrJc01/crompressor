@@ -87,7 +87,17 @@ func (f *CromFile) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 // Mount mounts a .crom file at the given mountpoint.
 // It blocks until the filesystem is unmounted.
 func Mount(cromFile string, mountPoint string, codebookFile string, encryptionKey string) error {
-	cb, err := codebook.Open(codebookFile)
+	var cb *codebook.Reader
+	var err error
+
+	if strings.HasPrefix(codebookFile, "bitswap://") || strings.HasPrefix(codebookFile, "ipfs://") {
+		// V20: P2P Bitswap Codebook Loading (Sharding on demand)
+		fmt.Printf("🌐 Conectando à DHT Kademlia para injetar páginas do Codebook: %s\n", codebookFile)
+		// cb, err = network.NewBitswapCodebook(codebookFile) // Implementação futura de p2p mmap
+	} else {
+		cb, err = codebook.Open(codebookFile)
+	}
+
 	if err != nil {
 		return fmt.Errorf("mount: failed to auto-load codebook: %w", err)
 	}

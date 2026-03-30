@@ -92,6 +92,17 @@ datasets/*
 !15-hivemind_trust_attack/scripts/
 !15-hivemind_trust_attack/scripts/*.sh
 
+# P20 (The Dimensional Compiler)
+16-simd_assembly_benchmark/*
+!16-simd_assembly_benchmark/*.md
+!16-simd_assembly_benchmark/scripts/
+!16-simd_assembly_benchmark/scripts/*.sh
+
+17-codebook_sharding_oom/*
+!17-codebook_sharding_oom/*.md
+!17-codebook_sharding_oom/scripts/
+!17-codebook_sharding_oom/scripts/*.sh
+
 # Temporários e Dumps
 *.log
 *.tmp

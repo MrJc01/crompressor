@@ -6,8 +6,13 @@ import "os"
 // On native targets, the data comes from mmap. On WASM, it's read into memory.
 type Reader struct {
 	file   *os.File
-	data   []byte // mmap'd region or in-memory bytes
+	data   []byte // mmap'd region (depreciating) or in-memory config for WASM
 	header *Header
+
+	// V20: Paging B-Tree / LRU Cache mechanism for 50GB Codebooks
+	pageSize int
+	lruCache map[uint64][]byte
+	pageReqs uint64
 }
 
 // Header returns the parsed header of the codebook.

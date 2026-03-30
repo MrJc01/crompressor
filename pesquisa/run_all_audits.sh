@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
-# 🚀 Crompressor Master Audit Script (V15)
-# Executa todos os testes de pesquisa do 01 ao 15 sequencialmente
+# 🚀 Crompressor Master Audit Script (V20)
+# Executa todos os testes de pesquisa do 01 ao 17 sequencialmente
 # ==============================================================================
 
 set -e
@@ -10,7 +10,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║      Mestre de Auditoria CROM (Testes 01-15)         ║"
+echo "║      Mestre de Auditoria CROM (Testes 01-17)         ║"
 echo "╚══════════════════════════════════════════════════════╝"
 
 echo "🔨 Construindo Crompressor na RAIZ..."
@@ -98,4 +98,16 @@ cd 15-hivemind_trust_attack/scripts
 bash 01_trust_attack.sh
 cd ../../
 
-echo "✅ [ALL DONE] Auditoria de 01 a 15 concluída com sucesso."
+# 12. 16: SIMD Assembly Benchmark (V20)
+echo "▶️ Iniciando Bateria 16 (SIMD Assembly Benchmark V20)..."
+cd 16-simd_assembly_benchmark/scripts
+bash 01_simd_benchmark.sh
+cd ../../
+
+# 13. 17: Codebook Sharding OOM (V20)
+echo "▶️ Iniciando Bateria 17 (Codebook Sharding OOM V20)..."
+cd 17-codebook_sharding_oom/scripts
+bash 01_sharding_test.sh
+cd ../../
+
+echo "✅ [ALL DONE] Auditoria Completa de 01 a 17 concluída com sucesso."

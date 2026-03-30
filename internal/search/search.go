@@ -1,11 +1,11 @@
-// Package search provides mechanisms to find the closest matching codeword
-// for a given chunk of data within a Codebook.
 package search
 
 import (
 	"encoding/binary"
 	"math"
 	"math/bits"
+
+	"golang.org/x/sys/cpu"
 )
 
 // MatchResult represents the outcome of a search operation.
@@ -43,8 +43,12 @@ type Searcher interface {
 }
 
 // hammingDistance calculates the number of mismatching bits between two byte slices.
-// Optimized to compare 64-bit blocks for massive performance gains. O(N).
 func hammingDistance(a, b []byte) int {
+	// O(1) Branch para Hardware Capabilities:
+	if cpu.X86.HasAVX2 || cpu.X86.HasAVX512 || cpu.ARM64.HasASIMD {
+		return hammingDistanceSIMD(a, b) // 256-bit unrolled via pipeline
+	}
+
 	dist := 0
 	minLen := len(a)
 	if len(b) < minLen {
