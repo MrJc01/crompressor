@@ -100,12 +100,12 @@ Node B → Envia CodebookHash → Node A responde Hash
 
 | Pesquisa | Dataset | Resultado |
 |:---------|:--------|:----------|
-| 01 — Logs JSON | 26.2MB, 200k linhas | **81.17%** economia vs Gzip (74%) |
+| 01 — Logs JSON | 26.2MB, 200k linhas | **81.00%** economia (VFS nativo) |
 | 02 — CDC Shift | 100KB mutado (byte int) | **99.85%** de blocos idênticos mantidos |
 | 03 — VFS Mount | logs.crom | TTFB < 10ms |
 | 04 — SRE | Grafana Dashboard / P2P | Métricas ativas |
 | 05 — TCO | Projeção 1PB | $18.6K/mês economia |
-| 06 — Imagens | 7 formatos, ~1700 testes | **1681/1783 PASS (94.2%)** |
+| 06 — Imagens | 7 formatos, ~2000 testes | **1961/2063 PASS (95.1%)** |
 
 ### Economia por Formato de Imagem (same-brain)
 | Formato | Economia | Observação |

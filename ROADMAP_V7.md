@@ -38,17 +38,25 @@ Prioridades definidas com base na consolidação SRE e infraestrutura de alta re
 
 ---
 
-## 🟢 Sprint 8: A Fronteira do Navegador e Distribuição (Próxima)
+## ✅ Sprint 8: Cloud-Native & Algorithmic Edge (CONCLUÍDA — 2026-03-29)
 
-### 8.1 WASM (WebAssembly) Build
-- Empacotar o `pkg/sdk` e transpilar via `GOOS=js GOARCH=wasm`.
-- Permitir compressão em clientes frontend (React/Next.js) prévia ao upload S3 (Client-side deduplication).
+### 8.1 Advanced Content-Aware Chunking (ACAC) ✅
+- **Implementado**: `internal/chunker/acac.go` — `SemanticChunker` com delimitadores de linha (`\n`) e fallback de tamanho máximo.
+- **Integração**: `compiler.go` e `compiler_stream.go` suportam `opts.UseACAC` e `opts.ACACDelimiter`.
+- **Testes**: `acac_test.go` — PASS em JSON Lines e overflow de linha longa.
 
-### 8.2 Kubernetes CRD Operator (Operator SDK)
-- Criar um `CrompressorDaemonSet` CRD que instaura drives `.cromdb` sincronizados nos volumes de nós EKS/GKE nativamente, permitindo logs compressos já na raíz docker.
+### 8.2 WebAssembly Build ✅
+- **Implementado**: `pkg/wasm/main.go` exportando `CromPack` e `CromVersion` para JavaScript via `syscall/js`.
+- **Infraestrutura**: `internal/codebook/` refatorado com build tags (`mmap.go` para nativo, `mmap_wasm.go` para JS) e `reader.go` compartilhado.
+- **Resultado**: Binário `crompressor.wasm` de **3.3MB** compilado com sucesso.
+- **Demo**: `examples/www/index.html` com UI dark-mode para drag-and-drop compression.
 
-### 8.3 Advanced Content-Aware Chunking (ACAC)
-- Detecção algorítmica de limites de estrutura (ex: detectar boundaries naturais de chaves JSON) em vez de Hash puro, para logs altamente indexáveis.
+### 8.3 Kubernetes Log Interceptor ✅
+- **Implementado**: `deployments/k8s/crompressor-daemonset.yml` — DaemonSet completo com:
+  - Volume `hostPath` para `/var/log/containers` (read-only)
+  - PVCs para codebook e output
+  - Prometheus scraping annotations (`prometheus.io/scrape: "true"`)
+  - Liveness/readiness probes via `/metrics`
 
 ---
 
@@ -56,5 +64,5 @@ Prioridades definidas com base na consolidação SRE e infraestrutura de alta re
 ```
 ✅ Sprint 6 (Delta Sync & Stream)        → Concluído (2026-03-29)
 ✅ Sprint 7 (The Swarm & Anti-Fragility) → Concluído (2026-03-29)
-⬜ Sprint 8 (Cloud Native & WASM Target) → Em Planejamento
+✅ Sprint 8 (Cloud Native & WASM Target) → Concluído (2026-03-29)
 ```

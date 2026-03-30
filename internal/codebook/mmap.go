@@ -1,3 +1,6 @@
+//go:build !js
+// +build !js
+
 package codebook
 
 import (
@@ -5,15 +8,6 @@ import (
 	"os"
 	"syscall"
 )
-
-// Reader provides read-only access to a .cromdb file via memory mapping.
-// The entire file is mapped into virtual address space but only accessed pages
-// are loaded into RAM by the OS kernel (demand paging).
-type Reader struct {
-	file   *os.File
-	data   []byte // mmap'd region
-	header *Header
-}
 
 // Open opens a .cromdb file and maps it into memory.
 // The file is opened read-only and mapped with MAP_SHARED | PROT_READ.
@@ -75,34 +69,46 @@ func Open(path string) (*Reader, error) {
 	}, nil
 }
 
-// Header returns the parsed header of the codebook.
-func (r *Reader) Header() *Header {
-	return r.header
-}
-
-// CodewordCount returns the number of codewords in the codebook.
-func (r *Reader) CodewordCount() uint64 {
-	return r.header.CodewordCount
-}
-
-// CodewordSize returns the size of each codeword in bytes.
-func (r *Reader) CodewordSize() uint16 {
-	return r.header.CodewordSize
-}
-
-// BuildHash returns the SHA-256 hash of the codeword data section.
-func (r *Reader) BuildHash() [BuildHashSize]byte {
-	return r.header.BuildHash
-}
-
 // Close unmaps the memory region and closes the underlying file.
 func (r *Reader) Close() error {
 	if r.data != nil {
-		if err := syscall.Munmap(r.data); err != nil {
-			r.file.Close()
-			return fmt.Errorf("codebook: munmap failed: %w", err)
+		if r.file != nil {
+			if err := syscall.Munmap(r.data); err != nil {
+				r.file.Close()
+				return fmt.Errorf("codebook: munmap failed: %w", err)
+			}
 		}
 		r.data = nil
 	}
-	return r.file.Close()
+	if r.file != nil {
+		return r.file.Close()
+	}
+	return nil
+}
+
+// OpenFromBytes creates a Reader from raw bytes in memory (no mmap).
+// This is used by the WASM target where filesystem access is unavailable.
+func OpenFromBytes(data []byte) (*Reader, error) {
+	if len(data) < HeaderSize {
+		return nil, fmt.Errorf("codebook: data too small: %d bytes (minimum %d)", len(data), HeaderSize)
+	}
+
+	header, err := ParseHeader(data)
+	if err != nil {
+		return nil, fmt.Errorf("codebook: parse header: %w", err)
+	}
+
+	expectedSize := header.DataOffset + uint64(header.CodewordSize)*header.CodewordCount
+	if uint64(len(data)) < expectedSize {
+		return nil, fmt.Errorf(
+			"codebook: data truncated: size=%d, expected at least %d for %d codewords",
+			len(data), expectedSize, header.CodewordCount,
+		)
+	}
+
+	return &Reader{
+		file:   nil, // No underlying file
+		data:   data,
+		header: header,
+	}, nil
 }

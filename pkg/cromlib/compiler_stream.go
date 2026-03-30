@@ -42,7 +42,9 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 	if chunkSize == 0 {
 		chunkSize = 128
 	}
-	if opts.UseCDC {
+	if opts.UseACAC {
+		fc = chunker.NewSemanticChunker(opts.ACACDelimiter, chunkSize*8)
+	} else if opts.UseCDC {
 		fc = chunker.NewFastCDCChunker(chunkSize)
 	} else {
 		fc = chunker.NewFixedChunker(chunkSize)

@@ -1,0 +1,92 @@
+# Crompressor Log Interceptor DaemonSet
+# Deploys a crompressor daemon on every node that watches /var/log/containers
+# and compresses logs in real-time using Stream Pack mode.
+#
+# Prerequisites:
+#   1. A PersistentVolumeClaim named "crom-codebook" containing a trained .cromdb
+#   2. A PersistentVolumeClaim named "crom-output" for compressed .crom output
+#
+# Usage:
+#   kubectl apply -f crompressor-daemonset.yml
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: crompressor-log-interceptor
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: crompressor
+    app.kubernetes.io/component: log-compressor
+    app.kubernetes.io/version: "v7"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: crompressor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: crompressor
+        app.kubernetes.io/component: log-compressor
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9099"
+        prometheus.io/path: "/metrics"
+    spec:
+      tolerations:
+        # Allow scheduling on all nodes including control plane
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: crompressor
+          image: ghcr.io/mrjc01/crompressor:v7
+          args:
+            - "daemon"
+            - "--watch-dir=/var/log/containers"
+            - "--codebook=/codebook/universal.cromdb"
+            - "--output-dir=/output"
+            - "--stream"
+            - "--metrics-port=9099"
+          ports:
+            - containerPort: 9099
+              name: metrics
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: container-logs
+              mountPath: /var/log/containers
+              readOnly: true
+            - name: codebook
+              mountPath: /codebook
+              readOnly: true
+            - name: output
+              mountPath: /output
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9099
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 9099
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: container-logs
+          hostPath:
+            path: /var/log/containers
+            type: Directory
+        - name: codebook
+          persistentVolumeClaim:
+            claimName: crom-codebook
+        - name: output
+          persistentVolumeClaim:
+            claimName: crom-output

@@ -27,7 +27,9 @@ type PackOptions struct {
 	Concurrency   int
 	EncryptionKey string // Passphrase for AES-256-GCM. If empty, no encryption.
 	ChunkSize     int    // Size of the chunks (default 128)
-	UseCDC        bool   // If true, uses Content-Defined Chunking instead of FixedChunker
+	UseCDC        bool   // If true, uses FastCDC Content-Defined Chunking instead of FixedChunker
+	UseACAC       bool   // If true, overrides CDC and uses Advanced Content-Aware Chunking
+	ACACDelimiter byte   // Delimiter char for ACAC (e.g. '\n' or ',')
 	MultiPass     bool   // If true, restricts codebook usage to Top-256 patterns via two-pass
 	// Callback for progress bar integration, called with bytes processed
 	OnProgress func(bytesProcessed int)
@@ -211,7 +213,9 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	
 	searcher := search.NewLSHSearcher(cb)
 	var fc chunker.Chunker
-	if opts.UseCDC {
+	if opts.UseACAC {
+		fc = chunker.NewSemanticChunker(opts.ACACDelimiter, opts.ChunkSize*8) // allow longer max size for ACAC
+	} else if opts.UseCDC {
 		fc = chunker.NewFastCDCChunker(opts.ChunkSize)
 	} else {
 		fc = chunker.NewFixedChunker(opts.ChunkSize)
