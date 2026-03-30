@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
-# 🚀 Crompressor Master Audit Script (V11)
-# Executa todos os testes de pesquisa do 01 ao 07 sequencialmente
+# 🚀 Crompressor Master Audit Script (V14)
+# Executa todos os testes de pesquisa do 01 ao 13 sequencialmente
 # ==============================================================================
 
 set -e
@@ -10,7 +10,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║      Mestre de Auditoria CROM (Testes 01-10)         ║"
+echo "║      Mestre de Auditoria CROM (Testes 01-13)         ║"
 echo "╚══════════════════════════════════════════════════════╝"
 
 echo "🔨 Construindo Crompressor na RAIZ..."
@@ -68,4 +68,23 @@ cd 10-entropy_shield/scripts
 bash 01_entropy_stress.sh
 cd ../../
 
-echo "✅ [ALL DONE] Auditoria de 01 a 10 concluída com sucesso."
+# 7. 11: Metamorphic Spawning Benchmark (V14)
+echo "▶️ Iniciando Bateria 11 (Metamorphic Spawning V14)..."
+cd 11-metamorphic_spawning/scripts
+bash 01_spawning_benchmark.sh
+cd ../../
+
+# 8. 12: V8 Security Fuzzing (V14)
+echo "▶️ Iniciando Bateria 12 (V8 Security Fuzzing)..."
+cd 12-v8_security_fuzzing/scripts
+bash 01_security_fuzzing.sh
+cd ../../
+
+# 9. 13: Epigenetic P2P Mesh (V14)
+echo "▶️ Iniciando Bateria 13 (Epigenetic P2P Mesh)..."
+cd 13-epigenetic_p2p_mesh/scripts
+bash 01_p2p_mesh_test.sh
+cd ../../
+
+echo "✅ [ALL DONE] Auditoria de 01 a 13 concluída com sucesso."
+

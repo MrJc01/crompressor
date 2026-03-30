@@ -27,6 +27,8 @@ const (
 	Version6 uint16 = 6
 	// Version7 introduces Multi-Brain Routing via CodebookIndex
 	Version7 uint16 = 7
+	// Version8 introduces Metamorphic In-Band Brains (MicroDicts embedded in the header)
+	Version8 uint16 = 8
 
 	// HashSize is the size of SHA-256 hashes (32 bytes).
 	HashSize = 32
@@ -57,6 +59,9 @@ const (
 	// HeaderSizeV7 is identical to V6 for now, as routing happens in Chunk Table
 	HeaderSizeV7 = 137
 
+	// HeaderSizeV8 adds MicroDictSize (4). Total 141 bytes. Plus dynamic payload.
+	HeaderSizeV8 = 141
+
 	// EntrySizeV6 is the fixed size of a ChunkEntry in the Chunk Table (24 bytes).
 	EntrySizeV6 uint32 = 24
 
@@ -65,6 +70,13 @@ const (
 
 	// LiteralCodebookIndex is a sentinel value for literal uncompressed chunks
 	LiteralCodebookIndex uint8 = 255
+
+	// MetamorphicCodebookIndex marks chunks routed via the in-band Micro-Brain (V8)
+	MetamorphicCodebookIndex uint8 = 254
+
+	// MaxMicroDictSize is the hard security cap for in-band micro-dictionaries.
+	// Prevents OOM attacks from forged V8 headers. (32 MiB)
+	MaxMicroDictSize uint32 = 32 * 1024 * 1024
 
 	// ChunksPerBlock is the number of chunks grouped into a single Zstd frame in V2.
 	// Must match cromlib.BlockSize / chunker.DefaultChunkSize = 16MB / 128B = 131072.
@@ -93,6 +105,8 @@ type Header struct {
 	CodebookHash          [8]byte    // Used for V4 and V5
 	CodebookHashes        [3][8]byte // Used for V6 (L1, L2, L3 brains)
 	MerkleRoot            [32]byte
+	MicroDictSize         uint32     // Used for V8 (Metamorphic In-band Brain)
+	MicroDictionaryData   []byte     // Used for V8 (Dynamic array holding BPE patterns)
 }
 
 // NumBlocks returns the expected number of Zstd blocks for this file (V2+).
@@ -131,7 +145,7 @@ func ParseHeader(data []byte) (*Header, error) {
 		return h, nil
 	}
 
-	if h.Version >= Version2 && h.Version <= Version7 {
+	if h.Version >= Version2 && h.Version <= Version8 {
 		minSize := HeaderSizeV2
 		if h.Version == Version4 {
 			minSize = HeaderSizeV4
@@ -139,6 +153,8 @@ func ParseHeader(data []byte) (*Header, error) {
 			minSize = HeaderSizeV5
 		} else if h.Version == Version6 || h.Version == Version7 {
 			minSize = HeaderSizeV6
+		} else if h.Version == Version8 {
+			minSize = HeaderSizeV8
 		}
 		if len(data) < minSize {
 			return nil, fmt.Errorf("format: header too small for v%d (%d < %d)", h.Version, len(data), minSize)
@@ -167,6 +183,19 @@ func ParseHeader(data []byte) (*Header, error) {
 			// Mirror the first hash to the legacy field for compatibility wrappers
 			copy(h.CodebookHash[:], data[113:121])
 		}
+		if h.Version >= Version8 {
+			h.MicroDictSize = binary.LittleEndian.Uint32(data[137:141])
+			if h.MicroDictSize > MaxMicroDictSize {
+				return nil, fmt.Errorf("format: v8 micro-dict size %d exceeds safety cap %d (OOM defense)", h.MicroDictSize, MaxMicroDictSize)
+			}
+			if h.MicroDictSize > 0 {
+				if len(data) < int(HeaderSizeV8)+int(h.MicroDictSize) {
+					return nil, fmt.Errorf("format: header too small for v8 micro-dict payload (%d < %d)", len(data), int(HeaderSizeV8)+int(h.MicroDictSize))
+				}
+				h.MicroDictionaryData = make([]byte, h.MicroDictSize)
+				copy(h.MicroDictionaryData, data[141:141+h.MicroDictSize])
+			}
+		}
 		return h, nil
 	}
 
@@ -185,9 +214,9 @@ func (h *Header) Serialize() []byte {
 		return buf
 	}
 
-	// Default to V7 if not explicitly set and not V1
-	if h.Version < Version2 || h.Version > Version7 {
-		h.Version = Version7
+	// Default to V8 if not explicitly set and not V1
+	if h.Version < Version2 || h.Version > Version8 {
+		h.Version = Version8
 	}
 	
 	size := HeaderSizeV2
@@ -197,6 +226,8 @@ func (h *Header) Serialize() []byte {
 		size = HeaderSizeV5
 	} else if h.Version == Version6 || h.Version == Version7 {
 		size = HeaderSizeV6
+	} else if h.Version >= Version8 {
+		size = HeaderSizeV8 + int(h.MicroDictSize)
 	}
 	
 	buf := make([]byte, size)
@@ -234,6 +265,13 @@ func (h *Header) Serialize() []byte {
 		copy(buf[113:121], h.CodebookHashes[0][:])
 		copy(buf[121:129], h.CodebookHashes[1][:])
 		copy(buf[129:137], h.CodebookHashes[2][:])
+	}
+	
+	if h.Version >= Version8 {
+		binary.LittleEndian.PutUint32(buf[137:141], h.MicroDictSize)
+		if h.MicroDictSize > 0 {
+			copy(buf[141:141+h.MicroDictSize], h.MicroDictionaryData)
+		}
 	}
 	
 	return buf

@@ -38,3 +38,15 @@ coverage.out
 
 # ═══ Logs ═══
 *.log
+
+# ═══ Pesquisas & Benchmarks ═══
+pesquisa/**/results/*
+!pesquisa/**/results/.gitkeep
+pesquisa/**/brains/*
+!pesquisa/**/brains/.gitkeep
+dummy*
+*_output.bin
+*.json
+*.txt
+!testdata/*.txt
+!testdata/*.json

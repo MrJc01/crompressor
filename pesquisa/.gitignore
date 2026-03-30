@@ -62,6 +62,21 @@ datasets/*
 !10-entropy_shield/scripts/
 !10-entropy_shield/scripts/*.sh
 
+11-metamorphic_spawning/*
+!11-metamorphic_spawning/*.md
+!11-metamorphic_spawning/scripts/
+!11-metamorphic_spawning/scripts/*.sh
+
+12-v8_security_fuzzing/*
+!12-v8_security_fuzzing/*.md
+!12-v8_security_fuzzing/scripts/
+!12-v8_security_fuzzing/scripts/*.sh
+
+13-epigenetic_p2p_mesh/*
+!13-epigenetic_p2p_mesh/*.md
+!13-epigenetic_p2p_mesh/scripts/
+!13-epigenetic_p2p_mesh/scripts/*.sh
+
 # Temporários e Dumps
 *.log
 *.tmp

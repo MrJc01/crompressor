@@ -36,20 +36,39 @@ func (cr *Reader) ReadMetadata(encryptionKey string) (*Header, []uint32, []Chunk
 		if _, err := io.ReadFull(cr.r, headerBuf[6:]); err != nil {
 			return nil, nil, nil, fmt.Errorf("format: read v1 header: %w", err)
 		}
-	} else if version >= Version2 && version <= Version6 {
+	} else if version >= Version2 && version <= Version8 {
 		size := HeaderSizeV2
 		if version == Version4 {
 			size = HeaderSizeV4
 		} else if version == Version5 {
 			size = HeaderSizeV5
-		} else if version == Version6 {
+		} else if version == Version6 || version == Version7 {
 			size = HeaderSizeV6
+		} else if version == Version8 {
+			size = HeaderSizeV8
 		}
+		
 		headerBuf = make([]byte, size)
 		copy(headerBuf, metaBuf)
 		if _, err := io.ReadFull(cr.r, headerBuf[6:]); err != nil {
-			return nil, nil, nil, fmt.Errorf("format: read v%d header: %w", version, err)
+			return nil, nil, nil, fmt.Errorf("format: read v%d header (base): %w", version, err)
 		}
+
+		// Se for V8, o header estendido contém o tamanho do array dinâmico MicroDictSize
+		if version >= Version8 {
+			microDictSize := binary.LittleEndian.Uint32(headerBuf[137:141])
+			if microDictSize > MaxMicroDictSize {
+				return nil, nil, nil, fmt.Errorf("format: v8 microdict size %d exceeds safety cap (OOM defense)", microDictSize)
+			}
+			if microDictSize > 0 {
+				payloadBuf := make([]byte, microDictSize)
+				if _, err := io.ReadFull(cr.r, payloadBuf); err != nil {
+					return nil, nil, nil, fmt.Errorf("format: read v8 microdict payload: %w", err)
+				}
+				headerBuf = append(headerBuf, payloadBuf...)
+			}
+		}
+
 	} else {
 		return nil, nil, nil, fmt.Errorf("format: unsupported version %d", version)
 	}

@@ -282,3 +282,94 @@ func TestFormat_V4_HeaderSerializeRoundtrip(t *testing.T) {
 		t.Errorf("CodebookHash mismatch")
 	}
 }
+
+func TestFormat_V8_HeaderSerializeRoundtrip(t *testing.T) {
+	origHash := sha256.Sum256([]byte("metamorphic brain v8"))
+	salt := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+
+	// Simulate a small in-band Micro-Brain (e.g. 64 bytes of BPE patterns)
+	microDict := make([]byte, 64)
+	for i := range microDict {
+		microDict[i] = byte(i * 3)
+	}
+
+	h := &Header{
+		Version:             Version8,
+		IsEncrypted:         true,
+		Salt:                salt,
+		OriginalHash:        origHash,
+		OriginalSize:        5_000_000,
+		ChunkCount:          39063,
+		ChunkSize:           128,
+		MicroDictSize:       uint32(len(microDict)),
+		MicroDictionaryData: microDict,
+	}
+	copy(h.CodebookHashes[0][:], origHash[:8])
+
+	data := h.Serialize()
+	expectedSize := HeaderSizeV8 + len(microDict)
+	if len(data) != expectedSize {
+		t.Fatalf("serialized V8 header size: got %d, want %d", len(data), expectedSize)
+	}
+
+	h2, err := ParseHeader(data)
+	if err != nil {
+		t.Fatalf("ParseHeader failed: %v", err)
+	}
+
+	if h2.Version != Version8 {
+		t.Errorf("Version mismatch: got %d, want %d", h2.Version, Version8)
+	}
+	if !h2.IsEncrypted {
+		t.Errorf("IsEncrypted should be true")
+	}
+	if h2.OriginalSize != 5_000_000 {
+		t.Errorf("OriginalSize mismatch: got %d", h2.OriginalSize)
+	}
+	if h2.MicroDictSize != uint32(len(microDict)) {
+		t.Errorf("MicroDictSize mismatch: got %d, want %d", h2.MicroDictSize, len(microDict))
+	}
+	if !bytes.Equal(h2.MicroDictionaryData, microDict) {
+		t.Errorf("MicroDictionaryData content mismatch")
+	}
+
+	// Also test V7 backward compat: V7 header must still parse
+	h7 := &Header{
+		Version:      Version7,
+		OriginalSize: 1024,
+		ChunkCount:   8,
+	}
+	d7 := h7.Serialize()
+	if len(d7) != HeaderSizeV7 {
+		t.Fatalf("V7 header size: got %d, want %d", len(d7), HeaderSizeV7)
+	}
+	h7p, err := ParseHeader(d7)
+	if err != nil {
+		t.Fatalf("V7 ParseHeader failed: %v", err)
+	}
+	if h7p.Version != Version7 {
+		t.Errorf("V7 version mismatch: got %d", h7p.Version)
+	}
+}
+
+func TestFormat_V8_OOM_Defense(t *testing.T) {
+	// Forge a malicious V8 header with MicroDictSize = 4GB to trigger OOM defense
+	buf := make([]byte, HeaderSizeV8)
+	copy(buf[0:MagicSize], MagicString)
+
+	// Set Version = 8
+	buf[4] = byte(Version8)
+	buf[5] = byte(Version8 >> 8)
+
+	// Set a forged MicroDictSize = 4294967295 (0xFFFFFFFF = ~4GB)
+	buf[137] = 0xFF
+	buf[138] = 0xFF
+	buf[139] = 0xFF
+	buf[140] = 0xFF
+
+	_, err := ParseHeader(buf)
+	if err == nil {
+		t.Fatal("Expected OOM defense error for 4GB MicroDictSize, but ParseHeader succeeded!")
+	}
+	t.Logf("✅ OOM Defense triggered correctly: %v", err)
+}
