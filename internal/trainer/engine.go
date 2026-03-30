@@ -22,6 +22,7 @@ type TrainOptions struct {
 	ChunkSize    int // Size of chunks used for pattern extraction
 	OnProgress   func(bytesProcessed int)
 	DataAugmentation bool // Applies bit shifts before elite selection to combat overfitting
+	UseBPE           bool // Uses Byte-Pair Encoding abstraction instead of raw frequencies
 
 	// UpdatePath: path to an existing .cromdb to update incrementally.
 	// Existing patterns are seeded into the frequency table with a high
@@ -107,6 +108,10 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
+	// BPE Memory Sandbox
+	var bpeCorpus []byte
+	var bpeLimit = 50 * 1024 * 1024 // Limit BPE memory representation to 50MB to prevent CPU hang
+
 	for w := 0; w < opts.Concurrency; w++ {
 		wg.Add(1)
 		go func() {
@@ -122,16 +127,28 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 				for {
 					n, errRead := f.Read(buf)
 					if n > 0 {
-						chunks := fc.Split(buf[:n])
-						for _, c := range chunks {
-							// Only record full-size chunks for consistent codebook entries
-							if len(c.Data) == opts.ChunkSize {
-								ft.Record(c.Data)
+						if opts.UseBPE {
+							mu.Lock()
+							if len(bpeCorpus) < bpeLimit {
+								add := n
+								if len(bpeCorpus)+add > bpeLimit {
+									add = bpeLimit - len(bpeCorpus)
+								}
+								bpeCorpus = append(bpeCorpus, buf[:add]...)
 							}
+							totalBytes += uint64(n)
+							mu.Unlock()
+						} else {
+							chunks := fc.Split(buf[:n])
+							for _, c := range chunks {
+								if len(c.Data) == opts.ChunkSize {
+									ft.Record(c.Data)
+								}
+							}
+							mu.Lock()
+							totalBytes += uint64(n)
+							mu.Unlock()
 						}
-						mu.Lock()
-						totalBytes += uint64(n)
-						mu.Unlock()
 						opts.OnProgress(n)
 					}
 					if errRead == io.EOF {
@@ -147,63 +164,73 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 	}
 	wg.Wait()
 
-	uniquePatterns := ft.Len()
-
-	// Phase 2.5: Data Augmentation (Sprint 5.3)
-	if opts.DataAugmentation {
-		// Augment top 50% of the target words
-		AugmentPatterns(ft, opts.MaxCodewords/2)
-	}
-
+	var selected [][]byte
+	var uniquePatterns int
 	var mergedPatterns, replacedSlots int
 
-	// Phase 3: Merge logic
-	var selected [][]byte
-
-	if opts.UpdatePath != "" {
-		// --- INCREMENTAL UPDATE ---
-		// Load existing patterns and seed them into the frequency table
-		// with a base count boost so incumbents survive unless new data
-		// provides significantly better alternatives.
-		existingPatterns, err := codebook.ReadPatterns(opts.UpdatePath)
-		if err != nil {
-			return nil, fmt.Errorf("trainer: load update codebook: %w", err)
-		}
-
-		for _, p := range existingPatterns {
-			if len(p) == opts.ChunkSize {
-				// Seed with a boost count so existing patterns have incumbency advantage
-				ft.RecordWithCount(p, 100)
-				mergedPatterns++
+	if opts.UseBPE {
+		// --- BPE TRAINING PHASE ---
+		bpe := NewBPEBuilder(opts.MaxCodewords, opts.ChunkSize)
+		vocab := bpe.Train(bpeCorpus)
+		
+		uniquePatterns = len(vocab)
+		selected = make([][]byte, 0, len(vocab))
+		for id := uint32(0); id < uint32(len(vocab)); id++ {
+			if word, ok := vocab[id]; ok {
+				// Pad with zeros to fit LSH constraints
+				padded := make([]byte, opts.ChunkSize)
+				copy(padded, word)
+				selected = append(selected, padded)
 			}
 		}
+	} else {
+		uniquePatterns = ft.Len()
 
-		// Now select the best of old + new combined
-		selected = SelectElite(ft, opts.MaxCodewords, opts.MaxPerBucket)
-		replacedSlots = mergedPatterns - countOverlap(existingPatterns, selected)
-
-	} else if opts.BasePath != "" {
-		// --- TRANSFER LEARNING ---
-		// Load base patterns as initial elite seeds.
-		// Replace the least-frequent base slots with the best new patterns.
-		basePatterns, err := codebook.ReadPatterns(opts.BasePath)
-		if err != nil {
-			return nil, fmt.Errorf("trainer: load base codebook: %w", err)
+		// Phase 2.5: Data Augmentation (Sprint 5.3)
+		if opts.DataAugmentation {
+			// Augment top 50% of the target words
+			AugmentPatterns(ft, opts.MaxCodewords/2)
 		}
 
-		mergedPatterns = len(basePatterns)
+		// Phase 3: Merge logic
+		if opts.UpdatePath != "" {
+			// --- INCREMENTAL UPDATE ---
+			existingPatterns, err := codebook.ReadPatterns(opts.UpdatePath)
+			if err != nil {
+				return nil, fmt.Errorf("trainer: load update codebook: %w", err)
+			}
 
-		// Select new elite from fresh data only
-		newElite := SelectElite(ft, opts.MaxCodewords, opts.MaxPerBucket)
+			for _, p := range existingPatterns {
+				if len(p) == opts.ChunkSize {
+					ft.RecordWithCount(p, 100)
+					mergedPatterns++
+				}
+			}
 
-		// Merge: base patterns fill the codebook first, then the best new
-		// patterns replace the weakest base slots.
-		selected = mergeBaseWithNew(basePatterns, newElite, opts.MaxCodewords)
-		replacedSlots = len(selected) - countPresent(basePatterns, selected)
+			// Now select the best of old + new combined
+			selected = SelectElite(ft, opts.MaxCodewords, opts.MaxPerBucket)
+			replacedSlots = mergedPatterns - countOverlap(existingPatterns, selected)
 
-	} else {
-		// --- STANDARD TRAINING ---
-		selected = SelectElite(ft, opts.MaxCodewords, opts.MaxPerBucket)
+		} else if opts.BasePath != "" {
+			// --- TRANSFER LEARNING ---
+			basePatterns, err := codebook.ReadPatterns(opts.BasePath)
+			if err != nil {
+				return nil, fmt.Errorf("trainer: load base codebook: %w", err)
+			}
+
+			mergedPatterns = len(basePatterns)
+
+			// Select new elite from fresh data only
+			newElite := SelectElite(ft, opts.MaxCodewords, opts.MaxPerBucket)
+
+			// Merge: base patterns fill the codebook first, then the best new patterns replace the weakest base slots.
+			selected = mergeBaseWithNew(basePatterns, newElite, opts.MaxCodewords)
+			replacedSlots = len(selected) - countPresent(basePatterns, selected)
+
+		} else {
+			// --- STANDARD TRAINING ---
+			selected = SelectElite(ft, opts.MaxCodewords, opts.MaxPerBucket)
+		}
 	}
 
 	// Phase 4: Write codebook

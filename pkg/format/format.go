@@ -23,6 +23,8 @@ const (
 	Version4 uint16 = 4
 	// Version5 introduces MerkleTree Delta Sync
 	Version5 uint16 = 5
+	// Version6 introduces Convergent Encryption and Hierarchical Codebooks (L1, L2, L3)
+	Version6 uint16 = 6
 
 	// HashSize is the size of SHA-256 hashes (32 bytes).
 	HashSize = 32
@@ -47,6 +49,9 @@ const (
 	// HeaderSizeV5 adds MerkleRoot (32). Total 112 bytes.
 	HeaderSizeV5 = 112
 
+	// HeaderSizeV6 adds IsConvergentEncrypted (1) and CodebookHashes (24). Total 112+1+24 = 137 bytes.
+	HeaderSizeV6 = 137
+
 	// EntrySize is the fixed size of a ChunkEntry in the Chunk Table (24 bytes).
 	EntrySize = 8 + 8 + 4 + 4
 
@@ -62,16 +67,18 @@ const (
 
 // Header contains the top-level metadata of a .crom file.
 type Header struct {
-	Version       uint16
-	IsEncrypted   bool
-	IsPassthrough bool
-	Salt          [16]byte
-	OriginalHash [HashSize]byte
-	OriginalSize uint64
-	ChunkCount   uint32
-	ChunkSize    uint32
-	CodebookHash [8]byte
-	MerkleRoot   [32]byte
+	Version               uint16
+	IsEncrypted           bool
+	IsPassthrough         bool
+	IsConvergentEncrypted bool
+	Salt                  [16]byte
+	OriginalHash          [HashSize]byte
+	OriginalSize          uint64
+	ChunkCount            uint32
+	ChunkSize             uint32
+	CodebookHash          [8]byte    // Used for V4 and V5
+	CodebookHashes        [3][8]byte // Used for V6 (L1, L2, L3 brains)
+	MerkleRoot            [32]byte
 }
 
 // NumBlocks returns the expected number of Zstd blocks for this file (V2+).
@@ -109,12 +116,14 @@ func ParseHeader(data []byte) (*Header, error) {
 		return h, nil
 	}
 
-	if h.Version >= Version2 && h.Version <= Version5 {
+	if h.Version >= Version2 && h.Version <= Version6 {
 		minSize := HeaderSizeV2
 		if h.Version == Version4 {
 			minSize = HeaderSizeV4
 		} else if h.Version == Version5 {
 			minSize = HeaderSizeV5
+		} else if h.Version == Version6 {
+			minSize = HeaderSizeV6
 		}
 		if len(data) < minSize {
 			return nil, fmt.Errorf("format: header too small for v%d (%d < %d)", h.Version, len(data), minSize)
@@ -130,10 +139,18 @@ func ParseHeader(data []byte) (*Header, error) {
 		
 		if h.Version >= Version4 {
 			h.ChunkSize = binary.LittleEndian.Uint32(data[68:72])
-			copy(h.CodebookHash[:], data[72:80])
+			copy(h.CodebookHash[:], data[72:80]) // Legacy location
 		}
 		if h.Version >= Version5 {
 			copy(h.MerkleRoot[:], data[80:112])
+		}
+		if h.Version >= Version6 {
+			h.IsConvergentEncrypted = data[112] == 1
+			copy(h.CodebookHashes[0][:], data[113:121])
+			copy(h.CodebookHashes[1][:], data[121:129])
+			copy(h.CodebookHashes[2][:], data[129:137])
+			// Mirror the first hash to the legacy field for compatibility wrappers
+			copy(h.CodebookHash[:], data[113:121])
 		}
 		return h, nil
 	}
@@ -153,9 +170,9 @@ func (h *Header) Serialize() []byte {
 		return buf
 	}
 
-	// Default to V5 if not explicitly set and not V1
-	if h.Version < Version2 || h.Version > Version5 {
-		h.Version = Version5
+	// Default to V6 if not explicitly set and not V1
+	if h.Version < Version2 || h.Version > Version6 {
+		h.Version = Version6
 	}
 	
 	size := HeaderSizeV2
@@ -163,6 +180,8 @@ func (h *Header) Serialize() []byte {
 		size = HeaderSizeV4
 	} else if h.Version == Version5 {
 		size = HeaderSizeV5
+	} else if h.Version == Version6 {
+		size = HeaderSizeV6
 	}
 	
 	buf := make([]byte, size)
@@ -181,11 +200,25 @@ func (h *Header) Serialize() []byte {
 	
 	if h.Version >= Version4 {
 		binary.LittleEndian.PutUint32(buf[68:72], h.ChunkSize)
-		copy(buf[72:80], h.CodebookHash[:])
+		if h.Version == Version6 {
+			// In V6, CodebookHash legacy slot still gets [0] for older extractors viewing the first 80 bytes
+			copy(buf[72:80], h.CodebookHashes[0][:])
+		} else {
+			copy(buf[72:80], h.CodebookHash[:])
+		}
 	}
 	
 	if h.Version >= Version5 {
 		copy(buf[80:112], h.MerkleRoot[:])
+	}
+
+	if h.Version >= Version6 {
+		if h.IsConvergentEncrypted {
+			buf[112] = 1
+		}
+		copy(buf[113:121], h.CodebookHashes[0][:])
+		copy(buf[121:129], h.CodebookHashes[1][:])
+		copy(buf[129:137], h.CodebookHashes[2][:])
 	}
 	
 	return buf

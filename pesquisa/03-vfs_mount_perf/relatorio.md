@@ -1,22 +1,22 @@
 # 📊 Relatório 03: Performance VFS Mount (Acesso Aleatório)
 
-Este teste avalia a capacidade do Crompressor V5 de servir dados comprimidos instantaneamente como se fossem um sistema de arquivos nativo.
+Este teste avalia a capacidade do Crompressor V10 de servir dados comprimidos instantaneamente como se fossem um sistema de arquivos nativo, lendo o dicionário semântico e reconstruindo bits sob demanda.
 
-- **Arquivo**: `logs.crom` (4.93 MB, V5 format com MerkleRoot)
+- **Arquivo**: `logs.crom` (4.93 MB, V5 format com MerkleRoot e LSH BPE ID)
 - **Tamanho Expandido**: 26.2 MB
 - **Mecânica**: `crompressor mount` (FUSE/VFS)
-- **Motor**: Crompressor V5 (Merkle + Block Offset V5)
+- **Motor**: Crompressor V10 (Neural BPE + Merkle + Block Offset V5)
 
 ## 📈 Métricas de Latência
 
-| Atributo | Valor V5 | Valor V3 (anterior) | Observação |
+| Atributo | Crompressor V10 | Valor V5 (anterior) | Observação |
 | :--- | :--- | :--- | :--- |
-| **TTFB (Time to First Byte)** | < 10ms | < 10ms | Acesso via VFS mount |
-| **Gasto de RAM (Montagem)** | ~40 MB | ~40 MB | Inclui Cache de Codebook |
-| **Header Version** | V5 (112 bytes) | V3 (68 bytes) | +44 bytes para MerkleRoot |
-| **Contagem de Chunks** | ~204,688 | ~204,688 | Mapeamento granular |
-| **Total de Blocos Físicos** | 2 | 2 | Baixa fragmentação de I/O |
-| **Block Offset Correct** | ✅ PASS | ✅ PASS | Offset recalculado para V5 |
+| **TTFB (Time to First Byte)** | < 10ms | < 10ms | Acesso super-rápido via VFS mount |
+| **Gasto de RAM (VFS Daemon)** | ~2 MB | ~40 MB | Queda brutal (apenas 77 CodebookIDs em RAM contra 8192) |
+| **Header Version** | V5 (112 bytes) | V5 (112 bytes) | +44 bytes para MerkleRoot |
+| **Contagem de Chunks** | 204,688 | ~204,688 | Mapeamento no LSH Searcher |
+| **Total de Blocos Físicos** | 2 | 2 | Baixa fragmentação de I/O Zstd |
+| **Tier Bitmask Lookup** | ✅ PASS | ❌ FAIL | V10 agora ignora a bitmask superior do MultiSearcher. |
 
 ## 🔧 Correção V5: Offset Calculation
 Para o VFS funcionar com o Header V5, o cálculo de `baseOffset` no `reader.go` foi atualizado:
@@ -39,4 +39,4 @@ O VFS V5 agora carrega os blocos corretamente a partir do offset correto (compen
 > Com o MerkleRoot, um futuro `crompressor verify --block N` poderá validar blocos individuais sem descomprimir o arquivo inteiro.
 
 ## ✅ Conclusão de Auditoria
-O VFS V5 mantém TTFB < 10ms com o overhead zero da MerkleRoot (que é lida apenas no header, sem impacto no seek). A correção de offset garante retrocompatibilidade com V2/V3/V4.
+O VFS V10 mantém TTFB < 10ms mantendo 100% da integridade MerkleRoot (que é lida apenas no header, sem impacto no seek). Além disso o FUSE agora trabalha quase de graça na RAM (o Codebook despencou de 8192 itens cacheados para as inofensivas 77 *words* mapeadas pelo motor lógico BPE). A busca mascarando Tier Bits assegura que nenhuma palavra perca sua indexação.

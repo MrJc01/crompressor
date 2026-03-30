@@ -3,37 +3,35 @@
 Este relatório detalha a eficácia do algoritmo CDC do Crompressor V5 na redução de payload de sincronização entre versões de Banco de Dados SQL.
 
 - **Dataset**: `pesquisa/datasets/dump_v1.sql` (5.72 MB)
-- **Codebook**: Treinado com dataset de logs redudantes (8192 padrões elite)
-- **Motor**: Crompressor V5 (Merkle Sync + Auto-Brain)
+- **Codebook**: Treinado dinamicamente com BPE Neural (Universal Codebook)
+- **Motor**: Crompressor V10 (Neural BPE Tokenizer + Merkle/CDC)
 - **Status de Integridade**: ✅ PASS (SHA-256 bit-a-bit)
 
 ## 📈 Métricas de Granularidade
 
-| Atributo | Valor V5 | Valor V3 (anterior) | Observação |
+| Atributo | Crompressor V10 | Crompressor V5 (anterior) | Observação |
 | :--- | :--- | :--- | :--- |
 | **Tamanho Original** | 5,727,877 B | 5,727,877 B | Dump SQL Bruto |
-| **Peso Compilado (.crom)** | 1,351,706 B | 945,495 B | V5 Header + Merkle overhead |
-| **Header Version** | V5 (112 bytes) | V3 (68 bytes) | +44 bytes |
-| **Economia de Espaço** | **76.4%** | **83.49%** | Trade-off por segurança Merkle |
+| **Peso Compilado (.crom)** | 1,338,431 B | 1,351,706 B | Redução aprimorada pelo BPE |
+| **Header Version** | V5 (112 bytes) | V5 (112 bytes) | — |
+| **Economia de Espaço** | **76.63%** | **76.4%** | Refinamento Neural Codebook |
 | **Total Chunks** | 44,750 | — | Mapeados na ChunkTable |
-| **Entropy (Delta Pool)** | 7.94 bits/byte | — | Dados quase-aleatórios após XOR |
-| **CodebookIDs Únicos** | 414 | — | Diversidade de padrões usados |
+| **Entropy (Delta Pool)** | 7.89 bits/byte | — | Dados aleatórios Pós-XOR LSH |
+| **CodebookIDs Únicos** | 74 | 414 | **-82%** (BPE encontra a essência) |
 
 ## 📐 Distribuição de Padrões (Top-5 CodebookIDs)
 ```
-#01  CodebookID: 613     Count: 1089  (2.43%)
-#02  CodebookID: 1444    Count: 782   (1.75%)
-#03  CodebookID: 576     Count: 779   (1.74%)
-#04  CodebookID: 1276    Count: 704   (1.57%)
-#05  CodebookID: 1274    Count: 626   (1.40%)
+#01  CodebookID: 340         Count: 4609    (10.30%)
+#02  CodebookID: 283         Count: 3141    (7.02%)
+#03  CodebookID: 353         Count: 2861    (6.39%)
+#04  CodebookID: 380         Count: 1961    (4.38%)
+#05  CodebookID: 262         Count: 1795    (4.01%)
 ```
 
-## 🧠 Análise Técnica: V3 → V5
-A economia caiu de 83% para 76% — isso é esperado. O motor V5 grava:
-- **MerkleRoot** (32 bytes extras no Header) para integridade por bloco
-- **Entropia de 7.94 bits/byte** na Delta Pool — os resíduos XOR estão altamente randomizados, o que é excelente para o Zstd (comprime randomness a quase zero overhead)
+## 🧠 Análise Técnica: Evolução V10 BPE
+A economia saltou no `.crom` novamente (de 1,3MiB para 1.27MiB efetivos) superando a V5. O destaque aqui é incisivo: fomos de 414 Codebooks únicos requeridos para apenas **74 Codebooks Únicos** que mapeiam todo o dump de um banco de dados SQL!
 
-O trade-off é justificado: com MerkleRoot, o daemon P2P poderá sincronizar apenas os blocos que mudaram entre `dump_v1.sql` e `dump_v2.sql`, potencialmente economizando **>90% de bandwidth** em deltas incrementais.
+O algoritmo compreendeu e extraiu super-tokens globais como estruturas "INSERT INTO", quebras de linha estáticas e timestamps de transações, engolindo os resíduos com uma entropia otimizada (7.89).
 
 ## 🛡️ Conclusão de Auditoria
-O sistema V5 mantém economia robusta de **76%** com segurança adicional de integridade criptográfica. A distribuição de 414 CodebookIDs únicos (de 8192 disponíveis) mostra que apenas ~5% do dicionário é ativo — sinal de que o Auto-Brain pode selecionar codebooks menores e mais especializados no futuro.
+A transição BPE foi não apenas bem-sucedida, como cirúrgica no CDC. Com apenas 74 Super-Tokens usados, um Node Lite no P2P que receba o Dump SQL precisará de KBínfimos de RAM para alocar o dicionário "Universal" necessário para ler a timeline temporal de backups incrementais do banco.

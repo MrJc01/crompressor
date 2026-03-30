@@ -39,6 +39,7 @@ func (m MatchResult) Similarity(chunkBits int) float64 {
 type Searcher interface {
 	// FindBestMatch searches for the codeword that is most similar to the given chunk.
 	FindBestMatch(chunk []byte) (MatchResult, error)
+	Restrict(allowed []uint64)
 }
 
 // hammingDistance calculates the number of mismatching bits between two byte slices.

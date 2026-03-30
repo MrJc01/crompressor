@@ -20,10 +20,15 @@ Este repositório contém as evidências de laboratório coletadas para atestar 
 | **12. Universalidade Visual** | ✅ PASS | 1961/2063 testes PASS na Pesquisa 06. BMP/TIFF perfeitamente mapeados. |
 | **13. Auto-Brain Routing** | ✅ PASS | Universal Codebook suporta auto-inferência de MimeType nativa. |
 | **14. Merkle Integrity** | ✅ PASS | Root sincronizada para Casper-like delta diffing. |
+| **15. Sovereign FUSE (CromFS)** | 🛡️ CÓDIGO BAREMETAL | FileSystem que estilhaça OS pipes em tempo-real para o Codebook. |
+| **16. Convergent Crypto (ZK)** | 🔐 ZERO-KNOWLEDGE | AES-256 GCM derivado via HKDF do payload para global-dedup. |
+| **17. Neural BPE Tokenizer** | 🧠 COGNITIVO | Motor BPE Go puro extrai super-tokens semânticos de 80+ bytes. |
 
 ---
 
 ## 📂 Detalhamento dos Testes Reais
+
+## Estrutura Arquitetural Atual (V9 Sovereign Era)
 
 ### [Teste 01] Logs JSON — Redução Massiva
 - **Dataset**: 200k linhas (26.2MB).
@@ -65,6 +70,17 @@ Blocos não possuem mais 128 bytes travados, eles se ajustam magneticamente ao c
 
 ### 🧠 Mixture of Experts & Entropy Fast-Fail
 Medição de entropia em tempo real para detectar arquivos pré-comprimidos nativamente, ignorando a busca no LSH e despejando dados na Delta Pool intactos para economia dramática de CPU.
+
+#### Módulos Integrados V10:
+- `pkg/format/header.go`: Formato V6 com Multi-Brain Hash (L1/L2/L3) e Convergence Flag.
+- `pkg/sync`: Merkle-Tree synchronization (P2P Delta Sync).
+- `internal/crypto`: Convergent Encrypt (Zero-Knowledge Hash Keying).
+- `internal/network`: P2P Daemon via `go-libp2p` com Codebook Gossip.
+- `internal/cromfs`: `bazil.org/fuse` kernel bridge.
+- `internal/trainer/bpe.go`: Motor BPE Neural Go puro (época Cognitiva).
+
+### 🧠 Neural Codebooks (BPE - V10)
+Tokenização semântica via Byte-Pair Encoding adaptada ao formato CROM. No dataset de 26.2MB de logs JSON, o BPE com **392 tokens** (5x menos que o método antigo de 1885) alcançou **18.85%** de razão versus **18.87%** do método clássico. Tokens extraídos automaticamente incluem padrões como `"timestamp":"2026-03-29 03:50"` e `", "level":"INFO", "worker":"worker-X"` em blocos monolíticos de até 83 bytes.
 
 ### 📈 Grafana & SRE Stack
 Infraestrutura como Código no diretório `monitoring/` provendo grafos vibrantes e acompanhamento de saúde do motor em cenários kubernetes.

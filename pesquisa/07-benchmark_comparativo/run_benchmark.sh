@@ -26,8 +26,8 @@ echo "[*] Building latest crompressor..."
 pushd ../../
 make clean build > /dev/null
 # Generating generic codebook for testing
-echo "[*] Training universal codebook..."
-./bin/crompressor train --input pesquisa/datasets/train_logs --output benchmark.cromdb --size 8192
+echo "[*] Training universal codebook (Neural BPE)..."
+./bin/crompressor train --use-bpe --input pesquisa/datasets/train_logs --output benchmark.cromdb --size 8192
 popd
 
 # Re-link binary to local folder

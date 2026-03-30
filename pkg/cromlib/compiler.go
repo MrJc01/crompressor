@@ -24,8 +24,11 @@ import (
 
 // PackOptions defines the compiler settings.
 type PackOptions struct {
+	CodebookPaths []string // [0]=L3, [1]=L2, [2]=L1 (up to 3 supported)
 	Concurrency   int
 	EncryptionKey string // Passphrase for AES-256-GCM. If empty, no encryption.
+	UseConvergentEncryption bool // If true, encrypts chunks individually via Hash-Derived Key
+	GlobalSecret  string // Secret for Convergent Encryption (avoids brute-forcing small chunks)
 	ChunkSize     int    // Size of the chunks (default 128)
 	UseCDC        bool   // If true, uses FastCDC Content-Defined Chunking instead of FixedChunker
 	UseACAC       bool   // If true, overrides CDC and uses Advanced Content-Aware Chunking
@@ -352,6 +355,16 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 							codeID = match.CodebookID
 						}
 
+						// ZK Convergent Encryption (per-chunk rather than monolithic)
+						if opts.UseConvergentEncryption && opts.GlobalSecret != "" {
+							encryptedRes, errCrypto := crypto.ConvergentEncrypt([]byte(opts.GlobalSecret), residual)
+							if errCrypto != nil {
+								results[i] = processedChunk{err: errCrypto}
+								return
+							}
+							residual = encryptedRes
+						}
+
 						results[i] = processedChunk{
 							res: residual,
 							sim: sim,
@@ -439,6 +452,10 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	actualChunkCount := uint32(len(finalEntries))
 	header.ChunkCount = actualChunkCount
 	header.Version = format.Version5
+	if opts.UseConvergentEncryption {
+		header.Version = format.Version6
+		header.IsConvergentEncrypted = true
+	}
 	copy(header.OriginalHash[:], hasher.Sum(nil))
 
 	if len(blockHashes) > 0 {

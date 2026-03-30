@@ -36,6 +36,7 @@ import (
 	"github.com/MrJc01/crompressor/pkg/cromlib"
 	"github.com/MrJc01/crompressor/pkg/format"
 	cromsync "github.com/MrJc01/crompressor/pkg/sync"
+	"github.com/MrJc01/crompressor/internal/cromfs"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
@@ -66,6 +67,7 @@ mapas de referências determinísticos com fidelidade bit-a-bit.
 	rootCmd.AddCommand(infoCmd())
 	rootCmd.AddCommand(daemonCmd())
 	rootCmd.AddCommand(shareCmd())
+	rootCmd.AddCommand(cromfsCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -225,7 +227,7 @@ func shareCmd() *cobra.Command {
 func trainCmd() *cobra.Command {
 	var inputDir, outputPath, updatePath, basePath string
 	var maxCodewords, concurrency, chunkSize int
-	var augmentTrain bool
+	var augmentTrain, useBPE bool
 
 	cmd := &cobra.Command{
 		Use:   "train",
@@ -251,6 +253,9 @@ func trainCmd() *cobra.Command {
 			} else {
 				fmt.Printf("║  Mode:      %-29s ║\n", "Standard")
 			}
+			if useBPE {
+				fmt.Printf("║  Engine:    %-29s ║\n", "BPE (Neural Tokenizer)")
+			}
 			fmt.Println("╚═══════════════════════════════════════════╝")
 
 			bar := progressbar.DefaultBytes(
@@ -273,6 +278,7 @@ func trainCmd() *cobra.Command {
 			opts.UpdatePath = updatePath
 			opts.BasePath = basePath
 			opts.DataAugmentation = augmentTrain
+			opts.UseBPE = useBPE
 			opts.OnProgress = func(n int) {
 				bar.Add(n)
 			}
@@ -302,8 +308,9 @@ func trainCmd() *cobra.Command {
 	cmd.Flags().IntVarP(&chunkSize, "chunk-size", "k", 0, "Tamanho base dos chunks (0 = auto)")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 4, "Número de goroutines para processamento paralelo")
 	cmd.Flags().StringVar(&updatePath, "update", "", "Caminho para .cromdb existente (atualização incremental)")
-	cmd.Flags().StringVar(&basePath, "base", "", "Caminho para .cromdb base (transfer learning)")
-	cmd.Flags().BoolVar(&augmentTrain, "augment", false, "Aplica Data Augmentation nos padrões elites para previnir overfitting")
+	cmd.Flags().StringVar(&basePath, "base", "", "Caminho (.cromdb) de base (Transfer Learning)")
+	cmd.Flags().BoolVar(&augmentTrain, "augment", false, "Aplica shift de bits estocástico para diversificar o conjunto elite (combate overfitting)")
+	cmd.Flags().BoolVar(&useBPE, "use-bpe", false, "Usa motor iterativo neural BPE em vez da Frequência Absoluta Bruta")
 
 	return cmd
 }
@@ -908,4 +915,25 @@ func shannonEntropy(data []byte) float64 {
 	}
 
 	return entropy
+}
+
+func cromfsCmd() *cobra.Command {
+	var mountPoint, outPool, codebookPath string
+
+	cmd := &cobra.Command{
+		Use:   "cromfs",
+		Short: "Monta o Daemon de Escrita FUSE (Global Deduplication)",
+		Long:  `Monta um sistema de arquivos onde todas as escritas são compresso-compiladas via CROM.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if mountPoint == "" || outPool == "" || codebookPath == "" {
+				return fmt.Errorf("flags --mountpoint, --out-pool e --codebook obrigatórias")
+			}
+			os.MkdirAll(outPool, 0755)
+			return cromfs.Mount(mountPoint, outPool, codebookPath)
+		},
+	}
+	cmd.Flags().StringVarP(&mountPoint, "mountpoint", "m", "", "Diretório virtual /mnt/cromfs")
+	cmd.Flags().StringVarP(&outPool, "out-pool", "o", "", "Onde salvar (.crom)")
+	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Caminho do Codebook base")
+	return cmd
 }

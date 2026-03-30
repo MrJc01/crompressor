@@ -25,8 +25,8 @@ echo "🧪 [START] Auditoria Técnica Crompressor V2..."
 # TESTE 01: LOGS DE ALTA REDUNDÂNCIA
 # ------------------------------------------------------------------------------
 echo "📊 [TEST 01] Logs JSON (26MB) -> Deduplicação & Ratio"
-echo "   🧠 Treinando Codebook..."
-$BIN train -i "$DATASETS/train_logs" -o "$LOGS_DIR/logs.cromdb" > /dev/null 2>&1
+echo "   🧠 Treinando Codebook (BPE Ativado)..."
+$BIN train --use-bpe -i "$DATASETS/train_logs" -o "$LOGS_DIR/logs.cromdb" > /dev/null 2>&1
 
 echo "   📦 Compilando (Pack)..."
 START_TIME=$(date +%s%N)

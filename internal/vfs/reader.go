@@ -133,9 +133,11 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 		if entry.CodebookID == format.LiteralCodebookID {
 			reconstructedChunk = res
 		} else {
-			pattern, err := rr.cb.Lookup(entry.CodebookID)
+			// Mask out MultiSearcher tier bits (upper 2 bits of uint64)
+			cleanID := entry.CodebookID & 0x3FFFFFFFFFFFFFFF
+			pattern, err := rr.cb.Lookup(cleanID)
 			if err != nil {
-				return bytesRead, fmt.Errorf("vfs: lookup codeword %d: %w", entry.CodebookID, err)
+				return bytesRead, fmt.Errorf("vfs: lookup codeword %d: %w", cleanID, err)
 			}
 
 			usablePattern := pattern

@@ -210,9 +210,11 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 						}
 					}
 
-					pattern, err := cb.Lookup(targetID)
+					// Mask out MultiSearcher tier bits before looking up
+					cleanID := targetID & 0x3FFFFFFFFFFFFFFF
+					pattern, err := cb.Lookup(cleanID)
 					if err != nil {
-						return fmt.Errorf("unpack: lookup codeword %d: %w", targetID, err)
+						return fmt.Errorf("unpack: lookup codeword %d: %w", cleanID, err)
 					}
 
 					usablePattern := pattern
@@ -251,7 +253,8 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 			if targetID == format.LiteralCodebookID {
 				reconstructedChunk = res
 			} else {
-				pattern, err := cb.Lookup(targetID)
+				cleanID := targetID & 0x3FFFFFFFFFFFFFFF
+				pattern, err := cb.Lookup(cleanID)
 				if err != nil { return err }
 
 				usablePattern := pattern

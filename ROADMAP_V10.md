@@ -1,6 +1,6 @@
-# 🗺️ Crompressor V7 — Roadmap de Melhorias (The Swarm Phase)
+# 🗺️ Crompressor V10 — Roadmap de Melhorias (The Neural Codebook)
 
-Prioridades definidas com base na consolidação SRE e infraestrutura de alta resiliência alcançadas nas versões V6 e V7.
+Prioridades definidas com base na consolidação SRE e infraestrutura de alta resiliência alcançadas nas versões V6-V9, elevando o sistema para Tokenização Semântica via BPE em V10.
 
 ---
 
@@ -60,9 +60,45 @@ Prioridades definidas com base na consolidação SRE e infraestrutura de alta re
 
 ---
 
+## ✅ Sprint 9: The Sovereign CromFS (CONCLUÍDA — 2026-03-29)
+
+### 9.1 Criptografia Convergente (Zero-Knowledge) ✅
+- **Implementado**: `internal/crypto/convergent.go` permite derivar chaves AES-GCM 256 derivadas nativamente a partir do Hash SHA-256 do próprio `chunk`.
+- **Resultado**: Nós diferentes comprimindo dados iguais geram a mesma matriz binária criptografada (ciphertext) e nonce. Permite **Desduplicação Global** cruzada entre usuários sem quebrar o sigilo.
+
+### 9.2 Codebooks Hierárquicos (L1, L2, L3) ✅
+- **Implementado**: `internal/search/multi.go` orquestrando Arrays de `Searcher`. O header V6 agora aceita `[3][8]byte` assinaturas.
+- **Resultado**: A engrenagem LSH cai em fallback fluido (Local -> Projeto -> Universal), otimizando a latência usando heurísticas multi-tier.
+
+### 9.3 Cluster-Wide FUSE Daemon (CromFS) ✅
+- **Implementado**: Integrado `bazil.org/fuse` gerando o filesystem nativo `cromfs`.
+- **Implementado**: Subcomando `crompressor cromfs --m /mnt/cromfs`. As gravações regulares do Linux/Docker são interceptadas transparentemente, comprimidas no streaming e fragmentadas criptografadas para a pool.
+
+---
+
+## ✅ Sprint 10: The Neural Codebook (CONCLUÍDA — 2026-03-29)
+
+### 10.1 Byte-Pair Encoding (BPE) Engine ✅
+- **Implementado**: `internal/trainer/bpe.go` — Algoritmo completo BPE em Go puro.
+- **Mecânica**: Inicia com 256 bytes básicos, itera fundindo os bigramas mais frequentes até atingir o `MaxCodewords` (respeitando `maxLen=128` para conformidade LSH).
+- **Resultado**: Extraiu tokens como `"timestamp":"2026-03-29 03:50"` (28 bytes), `", "level":"INFO", "worker":"worker-2", "msg":"Task processed", "ip":"192.168.0."` (80 bytes) de maneira completamente autonoma.
+
+### 10.2 Integração CLI `--use-bpe` ✅
+- **Implementado**: Flag `--use-bpe` em `crompressor train` com ramificação completa no `engine.go`.
+- **Memory Sandbox**: Corpus limitado a 50MB de RAM para proteger contra OOM.
+
+### 10.3 Benchmark Comparativo ✅
+- **BPE (392 tokens)**: 26.2MB → 4,939,300 bytes = **18.85%** ✅ PASS.
+- **Standard (1885 tokens)**: 26.2MB → 4,943,049 bytes = **18.87%**.
+- **Veredito**: BPE com **5x menos vocabulário** supera marginalmente o método de frequência bruta.
+
+---
+
 ## Calendário de Integração
 ```
 ✅ Sprint 6 (Delta Sync & Stream)        → Concluído (2026-03-29)
 ✅ Sprint 7 (The Swarm & Anti-Fragility) → Concluído (2026-03-29)
 ✅ Sprint 8 (Cloud Native & WASM Target) → Concluído (2026-03-29)
+✅ Sprint 9 (Sovereign CromFS & ZK)      → Concluído (2026-03-29)
+✅ Sprint 10 (Neural Codebooks - BPE)    → Concluído (2026-03-29)
 ```
