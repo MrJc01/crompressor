@@ -1,4 +1,4 @@
-# 🧪 Pesquisa e Viabilidade Técnica: Crompressor V3
+# 🧪 Pesquisa e Viabilidade Técnica: Crompressor V16
 
 Este arquivo é o ponto central de auditoria para todos os experimentos de compressão soberana.
 
@@ -17,6 +17,11 @@ Este arquivo é o ponto central de auditoria para todos os experimentos de compr
 - 📄 [08 Cloud Vfs Latency](./08-cloud_vfs_latency/relatorio.md)
 - 📄 [09 P2p Dht Scale](./09-p2p_dht_scale/relatorio.md)
 - 📄 [10 Entropy Shield](./10-entropy_shield/relatorio.md)
+- 📄 [11 Metamorphic Spawning](./11-metamorphic_spawning/relatorio.md)
+- 📄 [12 V8 Security Fuzzing](./12-v8_security_fuzzing/relatorio.md)
+- 📄 [13 Epigenetic P2p Mesh](./13-epigenetic_p2p_mesh/relatorio.md)
+- 📄 [14 Semantic Cdc Benchmark](./14-semantic_cdc_benchmark/relatorio.md)
+- 📄 [15 Hive Mind Trust Attack](./15-hivemind_trust_attack/relatorio.md)
 
 ---
 

@@ -75,8 +75,8 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 	}
 
 	corruptBlocks := 0
-	// PASSTHROUGH LOGIC (V3)
-	if header.IsPassthrough {
+	// PASSTHROUGH LOGIC (V3 / V16 Smart Passthrough)
+	if header.IsPassthrough || header.ChunkCount == 0 {
 		// The rest of the file is just the raw data or encrypted raw data
 		if header.IsEncrypted {
 			derivedKey := crypto.DeriveKey([]byte(opts.EncryptionKey), header.Salt[:])

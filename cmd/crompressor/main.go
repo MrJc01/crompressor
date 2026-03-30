@@ -60,6 +60,8 @@ mapas de referências determinísticos com fidelidade bit-a-bit.
 
 	rootCmd.AddCommand(packCmd())
 	rootCmd.AddCommand(unpackCmd())
+	rootCmd.AddCommand(keysCmd())
+	rootCmd.AddCommand(trustCmd())
 	rootCmd.AddCommand(trainCmd())
 	rootCmd.AddCommand(verifyCmd())
 	rootCmd.AddCommand(benchmarkCmd())
@@ -79,6 +81,7 @@ func daemonCmd() *cobra.Command {
 	var codebookPath, dataDir, encKey string
 	var listenPort int
 	var bootstrapAddrs []string
+	var allowHiveMind bool
 
 	cmd := &cobra.Command{
 		Use:   "daemon",
@@ -112,6 +115,20 @@ de arquivos .crom na pasta data-dir.`,
 				return err
 			}
 			defer node.Stop()
+
+			// Node identity banner
+			_, err = network.LoadIdentity()
+			if err == nil {
+				fmt.Printf("✔ Identidade Carregada (Ed25519)\n")
+			} else {
+				fmt.Printf("⚠ Aviso: Operando anonimamente (Sem identidade trust). Use 'crompressor keys --gen'\n")
+			}
+
+			if allowHiveMind {
+				fmt.Printf("✔ Hive Mind Ativada: Sandboxing e Quarentena para Brains ativados.\n")
+			} else {
+				fmt.Printf("🔒 Hive Mind Desativada: GossipSub ignorará payloads de Brains externos.\n")
+			}
 
 			// Setup Protocol
 			syncProto := network.NewSyncProtocol(node)
@@ -147,8 +164,11 @@ de arquivos .crom na pasta data-dir.`,
 
 			// HTTP API for CLI integration (crompressor share, crom info --network)
 			http.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
 				peers := node.Host.Network().Peers()
-				fmt.Fprintf(w, "{\"peers\": %d}", len(peers))
+				peerCount := len(peers)
+				peerID := node.Host.ID().String()
+				fmt.Fprintf(w, `{"peers": %d, "peerID": "%s", "version": "v16"}`, peerCount, peerID)
 			})
 
 			http.HandleFunc("/share", func(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +216,42 @@ de arquivos .crom na pasta data-dir.`,
 	cmd.Flags().IntVarP(&listenPort, "port", "p", 4001, "Porta TCP/QUIC do libp2p")
 	cmd.Flags().StringSliceVar(&bootstrapAddrs, "bootstrap", nil, "Endereços multiaddr para bootstrap DHT")
 	cmd.Flags().StringVarP(&encKey, "encrypt", "e", "", "Chave AES para ler os pacotes. Requerida se os .crom estiverem encriptados.")
+	cmd.Flags().BoolVar(&allowHiveMind, "allow-hive-mind", false, "Habilita Quarentena e Aceitação de Brains via P2P (Opt-in Hive Mind)")
 
+	return cmd
+}
+
+func keysCmd() *cobra.Command {
+	var gen bool
+	cmd := &cobra.Command{
+		Use:   "keys",
+		Short: "Gerencia a identidade soberana Ed25519 (Keyring)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if gen {
+				return network.GenerateIdentity()
+			}
+			return fmt.Errorf("use --gen para gerar uma nova identidade P2P")
+		},
+	}
+	cmd.Flags().BoolVar(&gen, "gen", false, "Gera um novo par de chaves Ed25519")
+	return cmd
+}
+
+func trustCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "trust <peerID>",
+		Short: "Adiciona um Peer ID à Web of Trust para receber Codebooks",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			peerID := args[0]
+			err := network.TrustPeer(peerID)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✔ Peer '%s' validado como Confiável para a Colmeia.\n", peerID)
+			return nil
+		},
+	}
 	return cmd
 }
 
@@ -336,6 +391,7 @@ func packCmd() *cobra.Command {
 			}
 			
 			var det *autobrain.DetectionResult
+			var useAutoTrain bool
 			if autoBrain {
 				if codebookPath != "" {
 					return fmt.Errorf("--auto-brain e --codebook não podem ser usados juntos")
@@ -346,12 +402,18 @@ func packCmd() *cobra.Command {
 				}
 				cb, result, err := router.SelectBrain(input)
 				if err != nil {
-					return fmt.Errorf("falha ao selecionar cérebro automaticamente: %w", err)
+					// No suitable brain found — fall back to Auto-Training
+					fmt.Printf("⚠ Nenhum Brain adequado encontrado para '%s'. Ativando Auto-Training...\n", result.Category)
+					useAutoTrain = true
+					det = result
+				} else {
+					codebookPath = cb
+					det = result
 				}
-				codebookPath = cb
-				det = result
 			} else if codebookPath == "" {
-				return fmt.Errorf("flag --codebook é obrigatória caso --auto-brain não seja fornecido")
+				// Zero-config mode: no codebook provided at all → Auto-Training
+				fmt.Println("🧠 Modo Zero-Config: Nenhum codebook fornecido. Ativando Auto-Training...")
+				useAutoTrain = true
 			}
 
 			fmt.Println("╔═══════════════════════════════════════════╗")
@@ -424,7 +486,12 @@ func packCmd() *cobra.Command {
 				return nil
 			}
 
-			metrics, err := cromlib.Pack(input, output, codebookPath, opts)
+			var metrics *cromlib.Metrics
+			if useAutoTrain {
+				metrics, err = cromlib.AutoPack(input, output, opts)
+			} else {
+				metrics, err = cromlib.Pack(input, output, codebookPath, opts)
+			}
 			if err != nil {
 				return fmt.Errorf("erro no empacotamento: %v", err)
 			}

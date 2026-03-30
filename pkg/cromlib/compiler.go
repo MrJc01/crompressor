@@ -20,6 +20,7 @@ import (
 	"github.com/MrJc01/crompressor/internal/merkle"
 	"github.com/MrJc01/crompressor/internal/metrics"
 	"github.com/MrJc01/crompressor/internal/search"
+	"github.com/MrJc01/crompressor/internal/semantic"
 	"github.com/MrJc01/crompressor/pkg/format"
 )
 
@@ -247,7 +248,8 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	
 	var fc chunker.Chunker
 	if opts.UseACAC {
-		fc = chunker.NewSemanticChunker(opts.ACACDelimiter, opts.ChunkSize*8) // allow longer max size for ACAC
+		fileType := semantic.DetectHeuristicExtension(startBytes)
+		fc = semantic.NewContextualChunker(fileType, opts.ChunkSize*8) // allow longer max size for context chunker
 	} else if opts.UseCDC {
 		fc = chunker.NewFastCDCChunker(opts.ChunkSize)
 	} else {
@@ -641,6 +643,47 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 
 	packedSize := uint64(packedInfo.Size())
 	duration := time.Since(start)
+
+	// V16: Smart Passthrough — if the packed file is LARGER than the original,
+	// the codebook was ineffective. Rewrite as passthrough to guarantee zero expansion.
+	// Only for files larger than the header size (141B), since micro-files always expand.
+	headerOverhead := uint64(format.HeaderSizeV8)
+	if packedSize > originalSize && originalSize > headerOverhead {
+		// Rewind and rewrite as passthrough
+		outFile.Truncate(0)
+		outFile.Seek(0, 0)
+
+		header.ChunkCount = 0 // Mark as passthrough
+
+		// Write placeholder header first
+		if _, err := outFile.Write(header.Serialize()); err != nil {
+			return nil, err
+		}
+
+		// Re-read input and compute hash simultaneously
+		inFile.Seek(0, 0)
+		ptHasher := sha256.New()
+		io.Copy(io.MultiWriter(outFile, ptHasher), inFile)
+
+		// Update header with correct hash
+		copy(header.OriginalHash[:], ptHasher.Sum(nil))
+		outFile.Seek(0, 0)
+		outFile.Write(header.Serialize())
+
+		ptInfo, _ := outFile.Stat()
+		packedSize = uint64(ptInfo.Size())
+		duration = time.Since(start)
+
+		metrics.RecordPack(originalSize, packedSize, duration)
+		return &Metrics{
+			OriginalSize:  originalSize,
+			PackedSize:    packedSize,
+			Duration:      duration,
+			HitRate:       100,
+			AvgSimilarity: 0,
+			TotalChunks:   0,
+		}, nil
+	}
 	
 	metrics.RecordPack(originalSize, packedSize, duration)
 

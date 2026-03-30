@@ -21,6 +21,11 @@
 !08-cloud_vfs_latency/
 !09-p2p_dht_scale/
 !10-entropy_shield/
+!11-metamorphic_spawning/
+!12-v8_security_fuzzing/
+!13-epigenetic_p2p_mesh/
+!14-semantic_cdc_benchmark/
+!15-hivemind_trust_attack/
 
 # 🚫 Ignorar dados binários e logs dentro das pastas de teste
 01-logs_redundancia/*
@@ -76,6 +81,16 @@ datasets/*
 !13-epigenetic_p2p_mesh/*.md
 !13-epigenetic_p2p_mesh/scripts/
 !13-epigenetic_p2p_mesh/scripts/*.sh
+
+14-semantic_cdc_benchmark/*
+!14-semantic_cdc_benchmark/*.md
+!14-semantic_cdc_benchmark/scripts/
+!14-semantic_cdc_benchmark/scripts/*.sh
+
+15-hivemind_trust_attack/*
+!15-hivemind_trust_attack/*.md
+!15-hivemind_trust_attack/scripts/
+!15-hivemind_trust_attack/scripts/*.sh
 
 # Temporários e Dumps
 *.log

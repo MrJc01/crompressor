@@ -29,6 +29,8 @@ const (
 	Version7 uint16 = 7
 	// Version8 introduces Metamorphic In-Band Brains (MicroDicts embedded in the header)
 	Version8 uint16 = 8
+	// Version9 introduces Living CROMFS and O(1) Append Mutations (LSM WAL)
+	Version9 uint16 = 9
 
 	// HashSize is the size of SHA-256 hashes (32 bytes).
 	HashSize = 32
@@ -107,6 +109,41 @@ type Header struct {
 	MerkleRoot            [32]byte
 	MicroDictSize         uint32     // Used for V8 (Metamorphic In-band Brain)
 	MicroDictionaryData   []byte     // Used for V8 (Dynamic array holding BPE patterns)
+	Mutations             []V9MutationHeader // Used for V9 to hold metadata of appended deltas
+}
+
+// V9MutationHeader represents a WAL entry at the end of a Version9 .crom file.
+type V9MutationHeader struct {
+	Magic         [4]byte // "CMUT" (Crom MUTation)
+	Timestamp     int64   // Unix timestamp of the mutation
+	DiffPatchSize uint32  // Size of the appended diff payload
+}
+
+// V9MutationHeaderSize is the size of the mutation header (4 + 8 + 4 = 16 bytes).
+const V9MutationHeaderSize = 16
+
+// Bytes returns the binary representation of the V9MutationHeader.
+func (v *V9MutationHeader) Bytes() []byte {
+	buf := make([]byte, V9MutationHeaderSize)
+	copy(buf[0:4], v.Magic[:])
+	binary.LittleEndian.PutUint64(buf[4:12], uint64(v.Timestamp))
+	binary.LittleEndian.PutUint32(buf[12:16], v.DiffPatchSize)
+	return buf
+}
+
+// ParseV9MutationHeader parses bytes into a V9MutationHeader.
+func ParseV9MutationHeader(data []byte) (*V9MutationHeader, error) {
+	if len(data) < V9MutationHeaderSize {
+		return nil, fmt.Errorf("format: mutation header too small (%d < %d)", len(data), V9MutationHeaderSize)
+	}
+	h := &V9MutationHeader{}
+	copy(h.Magic[:], data[0:4])
+	if string(h.Magic[:]) != "CMUT" {
+		return nil, fmt.Errorf("format: invalid mutation magic: %q", string(h.Magic[:]))
+	}
+	h.Timestamp = int64(binary.LittleEndian.Uint64(data[4:12]))
+	h.DiffPatchSize = binary.LittleEndian.Uint32(data[12:16])
+	return h, nil
 }
 
 // NumBlocks returns the expected number of Zstd blocks for this file (V2+).
@@ -145,7 +182,7 @@ func ParseHeader(data []byte) (*Header, error) {
 		return h, nil
 	}
 
-	if h.Version >= Version2 && h.Version <= Version8 {
+	if h.Version >= Version2 && h.Version <= Version9 {
 		minSize := HeaderSizeV2
 		if h.Version == Version4 {
 			minSize = HeaderSizeV4
@@ -153,7 +190,7 @@ func ParseHeader(data []byte) (*Header, error) {
 			minSize = HeaderSizeV5
 		} else if h.Version == Version6 || h.Version == Version7 {
 			minSize = HeaderSizeV6
-		} else if h.Version == Version8 {
+		} else if h.Version == Version8 || h.Version == Version9 {
 			minSize = HeaderSizeV8
 		}
 		if len(data) < minSize {

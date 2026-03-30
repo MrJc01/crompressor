@@ -87,6 +87,10 @@ func (r *BrainRouter) SelectBrain(filePath string) (string, *DetectionResult, er
 		return "", nil, err
 	}
 
+	// Domain-aware routing: reject image brains for text data and vice-versa
+	isTextCategory := det.Category == "text_logs" || det.Category == "text_sql" || det.Category == "text_code"
+	isImageCategory := det.Category == "raw_image"
+
 	// Find expert
 	brainPath, ok := r.mapping[det.Category]
 	if ok && brainPath != "" {
@@ -105,24 +109,31 @@ func (r *BrainRouter) SelectBrain(filePath string) (string, *DetectionResult, er
 		}
 	}
 
-	// Fallback to absolute universal
+	// Fallback to universal (but NOT if it's an image brain being used for text)
 	universalPath, ok := r.mapping["universal"]
-	if !ok || universalPath == "" {
-		// If NO brains are found, we must return an error because CROM requires at least one
-		// Wait, we could default to standard text_logs if it's there
-		for _, p := range r.mapping {
-			if p != "" {
-				if _, err := os.Stat(p); err == nil {
-					return p, det, nil // Return ANY valid brain
-				}
-			}
+	if ok && universalPath != "" {
+		if _, err := os.Stat(universalPath); err == nil {
+			return universalPath, det, nil
 		}
-		return "", det, fmt.Errorf("no valid codebooks found in %s to compress category '%s'", r.brainDir, det.Category)
 	}
 
-	if _, err := os.Stat(universalPath); err != nil {
-		return "", det, fmt.Errorf("universal brain assigned but missing at %s", universalPath)
+	// Last resort: try ANY brain, but respect domain boundaries
+	for cat, p := range r.mapping {
+		if p == "" {
+			continue
+		}
+		// Don't use image brains for text data
+		if isTextCategory && cat == "raw_image" {
+			continue
+		}
+		// Don't use text brains for image data
+		if isImageCategory && (cat == "text_logs" || cat == "text_sql" || cat == "text_code") {
+			continue
+		}
+		if _, err := os.Stat(p); err == nil {
+			return p, det, nil
+		}
 	}
 
-	return universalPath, det, nil
+	return "", det, fmt.Errorf("no valid codebooks found in %s for category '%s' (use --auto-brain or train a domain-specific brain)", r.brainDir, det.Category)
 }

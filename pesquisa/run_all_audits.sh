@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
-# 🚀 Crompressor Master Audit Script (V14)
-# Executa todos os testes de pesquisa do 01 ao 13 sequencialmente
+# 🚀 Crompressor Master Audit Script (V15)
+# Executa todos os testes de pesquisa do 01 ao 15 sequencialmente
 # ==============================================================================
 
 set -e
@@ -10,7 +10,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║      Mestre de Auditoria CROM (Testes 01-13)         ║"
+echo "║      Mestre de Auditoria CROM (Testes 01-15)         ║"
 echo "╚══════════════════════════════════════════════════════╝"
 
 echo "🔨 Construindo Crompressor na RAIZ..."
@@ -86,5 +86,16 @@ cd 13-epigenetic_p2p_mesh/scripts
 bash 01_p2p_mesh_test.sh
 cd ../../
 
-echo "✅ [ALL DONE] Auditoria de 01 a 13 concluída com sucesso."
+# 10. 14: Semantic CDC Benchmark (V15)
+echo "▶️ Iniciando Bateria 14 (Semantic CDC Benchmark V15)..."
+cd 14-semantic_cdc_benchmark/scripts
+bash 01_semantic_benchmark.sh
+cd ../../
 
+# 11. 15: Hive-Mind Trust Attack Simulation (V15)
+echo "▶️ Iniciando Bateria 15 (Hive-Mind Trust Attack V15)..."
+cd 15-hivemind_trust_attack/scripts
+bash 01_trust_attack.sh
+cd ../../
+
+echo "✅ [ALL DONE] Auditoria de 01 a 15 concluída com sucesso."

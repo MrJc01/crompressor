@@ -36,7 +36,7 @@ func (cr *Reader) ReadMetadata(encryptionKey string) (*Header, []uint32, []Chunk
 		if _, err := io.ReadFull(cr.r, headerBuf[6:]); err != nil {
 			return nil, nil, nil, fmt.Errorf("format: read v1 header: %w", err)
 		}
-	} else if version >= Version2 && version <= Version8 {
+	} else if version >= Version2 && version <= Version9 {
 		size := HeaderSizeV2
 		if version == Version4 {
 			size = HeaderSizeV4
@@ -44,7 +44,7 @@ func (cr *Reader) ReadMetadata(encryptionKey string) (*Header, []uint32, []Chunk
 			size = HeaderSizeV5
 		} else if version == Version6 || version == Version7 {
 			size = HeaderSizeV6
-		} else if version == Version8 {
+		} else if version == Version8 || version == Version9 {
 			size = HeaderSizeV8
 		}
 		

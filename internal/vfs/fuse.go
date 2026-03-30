@@ -16,19 +16,19 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
-// CromRoot is the root directory of the FUSE mount.
 type CromRoot struct {
 	fs.Inode
 	reader   *RandomReader
 	fileName string
 	fileSize int64
+	wal      *WriteAheadLog
 }
 
 var _ fs.NodeOnAdder = (*CromRoot)(nil)
 
 func (r *CromRoot) OnAdd(ctx context.Context) {
 	// Add the single file to the root directory
-	ch := r.NewPersistentInode(ctx, &CromFile{reader: r.reader, size: r.fileSize}, fs.StableAttr{Mode: fuse.S_IFREG | 0444, Ino: 2})
+	ch := r.NewPersistentInode(ctx, &CromFile{reader: r.reader, size: r.fileSize, wal: r.wal}, fs.StableAttr{Mode: fuse.S_IFREG | 0644, Ino: 2})
 	r.AddChild(r.fileName, ch, true)
 }
 
@@ -37,12 +37,14 @@ type CromFile struct {
 	fs.Inode
 	reader *RandomReader
 	size   int64
+	wal    *WriteAheadLog
 }
 
 var _ fs.NodeReader = (*CromFile)(nil)
 var _ fs.NodeWriter = (*CromFile)(nil)
 var _ fs.NodeGetattrer = (*CromFile)(nil)
 var _ fs.NodeOpener = (*CromFile)(nil)
+var _ fs.NodeFlusher = (*CromFile)(nil)
 
 func (f *CromFile) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
 	return nil, 0, 0
@@ -64,10 +66,22 @@ func (f *CromFile) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off 
 }
 
 func (f *CromFile) Write(ctx context.Context, fh fs.FileHandle, data []byte, off int64) (uint32, syscall.Errno) {
-	// [WBCache] Write-back cache staging
-	// Blocks written here are asynchronously appended to a local buffer before P2P Sync.
-	fmt.Printf("[WBCache] Staging %d bytes at offset %d\n", len(data), off)
+	if f.wal != nil {
+		err := f.wal.Append(data, off)
+		if err != nil {
+			return 0, syscall.EIO
+		}
+	} else {
+		fmt.Printf("[WBCache] Staging %d bytes at offset %d (WAL Not Initialized)\n", len(data), off)
+	}
 	return uint32(len(data)), 0
+}
+
+func (f *CromFile) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
+	if f.wal != nil {
+		f.wal.forceFlush() // Commits directly to disk on close
+	}
+	return 0
 }
 
 // Mount mounts a .crom file at the given mountpoint.
@@ -124,6 +138,10 @@ func Mount(cromFile string, mountPoint string, codebookFile string, encryptionKe
 		return fmt.Errorf("mount: failed to init random reader: %w", err)
 	}
 
+	// Initialize Write-Ahead Log for Living Files
+	walEngine := NewWriteAheadLog(cromFile)
+	defer walEngine.Close()
+
 	baseName := filepath.Base(cromFile)
 	if strings.HasSuffix(baseName, ".crom") {
 		baseName = strings.TrimSuffix(baseName, ".crom")
@@ -135,6 +153,7 @@ func Mount(cromFile string, mountPoint string, codebookFile string, encryptionKe
 		reader:   randomReader,
 		fileName: baseName,
 		fileSize: int64(header.OriginalSize),
+		wal:      walEngine,
 	}
 
 	server, err := fs.Mount(mountPoint, root, &fs.Options{

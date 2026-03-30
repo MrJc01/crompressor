@@ -32,15 +32,15 @@ O CROM não comprime — ele **compila**. Transforma dados brutos em um **mapa d
                      └─────────────┘
 ```
 
-## Pilares do Projeto
+## Pilares do Projeto (Crompressor V16)
 
 | Pilar | Descrição |
 |---|---|
-| 🎯 **Fidelidade Absoluta** | Compressão 100% lossless. SHA-256 do original = SHA-256 do reconstruído. |
-| 🧠 **Codebook Universal** | Dicionário de 50GB+ com bilhões de padrões binários indexados via HNSW. |
-| ⚡ **Performance em Go** | Binários estáticos, goroutines para paralelismo, mmap para acesso ao modelo. |
-| 🛡️ **Soberania Digital** | O modelo fica local. O arquivo `.crom` é inútil sem o Codebook — segurança por design. |
-| 🔬 **Busca Determinística** | Sem redes neurais generativas. Sem alucinação. Busca exata + refinamento matemático. |
+| 🎯 **Fidelidade Absoluta** | Compressão 100% lossless garantida por SHA-256 e resíduos exatos. |
+| 🧠 **Codebook & Auto-Training** | Dicionários universais P2P com inferência de domínio e BPE instantâneo (Zero-Config). |
+| ⚡ **Performance e Entropia** | Cache LSH O(1), Semantic Chunking e bypass de arquivos aleatórios via Shannon Entropy > 7.5. |
+| 🛡️ **Tolerância a Expansão** | Smart Passthrough nativo: Se comprimir piorar o tamanho, converte zero-overhead. |
+| 🔬 **Soberania e P2P Sync** | Daemon Kademlia DHT com Bitswap de blocos e validação criptográfica GossipSub (Ed25519). |
 
 ## Arquitetura Resumida
 
@@ -55,17 +55,20 @@ crompressor-pack (Compilador)                    crompressor-unpack (Decompilado
 └─────────────────────┘                   └──────────────────────────┘
 ```
 
-## Quick Start (MVP)
+## Quick Start (V16)
 
 ```bash
-# Compilar (comprimir)
-crompressor pack --input ./meus_dados/ --output ./backup.crom --codebook ./codebook.cromdb
+# Compilar (Modo Zero-Config com Auto-Training nativo)
+crompressor pack -i ./meus_dados.json -o ./backup.crom
 
-# Decompildar (descomprimir)
-crompressor unpack --input ./backup.crom --output ./restaurado/ --codebook ./codebook.cromdb
+# Decompilar (restauração bit-a-bit)
+crompressor unpack -i ./backup.crom -o ./restaurado.json
 
 # Validar integridade
-crompressor verify --original ./meus_dados/ --restored ./restaurado/
+crompressor verify --original ./meus_dados.json --restored ./restaurado.json
+
+# Modo Servidor P2P (Daemon GossipSub)
+crompressor daemon --allow-hive-mind
 ```
 
 ## Documentação
