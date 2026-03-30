@@ -94,7 +94,7 @@ func Grep(target string, inputPath string, codebookPath string) error {
 	}
 
 	// Calculate absolute offsets for physical blocks inside the .crom file (exactly like VFS does)
-	tableSize := int(header.ChunkCount) * format.EntrySize
+	tableSize := int(header.ChunkCount) * int(format.GetEntrySize(header.Version))
 	hSize := format.HeaderSizeV2
 	if header.Version == format.Version4 { hSize = format.HeaderSizeV4 }
 	if header.Version == format.Version5 { hSize = format.HeaderSizeV5 }

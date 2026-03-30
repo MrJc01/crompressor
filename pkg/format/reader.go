@@ -84,7 +84,7 @@ func (cr *Reader) ReadMetadata(encryptionKey string) (*Header, []uint32, []Chunk
 
 	// 3. Read Chunk Table
 	// If encrypted, the length of the ciphertext is greater due to the 12-byte nonce and 16-byte tag (28 bytes overhead).
-	tableSize := int(header.ChunkCount) * EntrySize
+	tableSize := int(header.ChunkCount) * int(GetEntrySize(header.Version))
 	if header.IsEncrypted {
 		tableSize += 28
 	}
@@ -105,7 +105,7 @@ func (cr *Reader) ReadMetadata(encryptionKey string) (*Header, []uint32, []Chunk
 		}
 	}
 
-	entries, err := ParseChunkTable(tableBuf, header.ChunkCount)
+	entries, err := ParseChunkTable(tableBuf, header.ChunkCount, header.Version)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("format: parse chunk table: %w", err)
 	}

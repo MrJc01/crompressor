@@ -56,7 +56,7 @@ func NewRandomReader(f io.ReaderAt, fileSize int64, header *format.Header, block
 	// Calculate absolute offsets for each block in the file
 	// Block Table is immediately after Header
 	// Then ChunkTable
-	tableSize := int(header.ChunkCount) * format.EntrySize
+	tableSize := int(header.ChunkCount) * int(format.GetEntrySize(header.Version))
 	if header.IsEncrypted {
 		tableSize += 28
 	}

@@ -151,8 +151,8 @@ func TestFormat_V2_ChunkEntrySerialization(t *testing.T) {
 		{CodebookID: 42, DeltaOffset: 1000, DeltaSize: 512, OriginalSize: 128},
 	}
 
-	data := SerializeChunkTable(entries)
-	parsed, err := ParseChunkTable(data, uint32(len(entries)))
+	data := SerializeChunkTable(entries, Version2)
+	parsed, err := ParseChunkTable(data, uint32(len(entries)), Version2)
 	if err != nil {
 		t.Fatalf("ParseChunkTable failed: %v", err)
 	}

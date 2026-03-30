@@ -80,7 +80,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	if err != nil {
 		return nil, fmt.Errorf("pack: entropy analysis: %w", err)
 	}
-	isPassthrough := entropy.IsPassthroughRequired(eScore, startBytes)
+	isPassthrough := entropy.DetectHeuristicBypass(eScore, startBytes)
 
 	// Adaptive Chunk Size Configuration
 	if opts.ChunkSize <= 0 {
@@ -96,13 +96,28 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	// Rewind file to start
 	inFile.Seek(0, 0)
 	
-	var cb *codebook.Reader
+	var cbs []*codebook.Reader
 	if !isPassthrough {
-		cb, err = codebook.Open(codebookPath)
-		if err != nil {
-			return nil, fmt.Errorf("pack: failed to open codebook: %w", err)
+		if len(opts.CodebookPaths) > 0 {
+			for _, p := range opts.CodebookPaths {
+				cb, err := codebook.Open(p)
+				if err != nil {
+					return nil, fmt.Errorf("pack: failed to open codebook %s: %w", p, err)
+				}
+				cbs = append(cbs, cb)
+			}
+		} else if codebookPath != "" {
+			cb, err := codebook.Open(codebookPath)
+			if err != nil {
+				return nil, fmt.Errorf("pack: failed to open codebook: %w", err)
+			}
+			cbs = append(cbs, cb)
 		}
-		defer cb.Close()
+		defer func() {
+			for _, cb := range cbs {
+				cb.Close()
+			}
+		}()
 	}
 
 	info, err := inFile.Stat()
@@ -129,9 +144,15 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		ChunkSize:     uint32(opts.ChunkSize),
 	}
 
-	if cb != nil {
-		cbHashFull := cb.BuildHash()
-		copy(header.CodebookHash[:], cbHashFull[:8])
+	if len(cbs) > 0 {
+		cbHashFull := cbs[0].BuildHash()
+		copy(header.CodebookHash[:], cbHashFull[:8]) // Legacy CodebookHash slot covered by serialize logic
+		for i, cb := range cbs {
+			if i < 3 {
+				hash := cb.BuildHash()
+				copy(header.CodebookHashes[i][:], hash[:8])
+			}
+		}
 	} else {
 		cbHashFull := sha256.Sum256([]byte(codebookPath))
 		copy(header.CodebookHash[:], cbHashFull[:8])
@@ -197,7 +218,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		return nil, err
 	}
 
-	chunkTableSize := numEstimatedChunks * format.EntrySize
+	chunkTableSize := numEstimatedChunks * format.GetEntrySize(header.Version)
 	if header.IsEncrypted {
 		chunkTableSize += 28 // AES-GCM overhead
 	}
@@ -214,7 +235,11 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	// 4. Process Stream
 	hasher := sha256.New()
 	
-	searcher := search.NewLSHSearcher(cb)
+	var searchers []*search.LSHSearcher
+	for _, cb := range cbs {
+		searchers = append(searchers, search.NewLSHSearcher(cb))
+	}
+	
 	var fc chunker.Chunker
 	if opts.UseACAC {
 		fc = chunker.NewSemanticChunker(opts.ACACDelimiter, opts.ChunkSize*8) // allow longer max size for ACAC
@@ -224,7 +249,8 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		fc = chunker.NewFixedChunker(opts.ChunkSize)
 	}
 
-	if opts.MultiPass && cb != nil {
+	if opts.MultiPass && len(cbs) > 0 {
+		searcher := searchers[0]
 		freq := make(map[uint64]int)
 		bufP1 := make([]byte, BlockSize)
 		for {
@@ -266,7 +292,9 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 			allowed = append(allowed, s[i].id)
 		}
 
-		searcher.Restrict(allowed)
+		for _, s := range searchers {
+			s.Restrict(allowed)
+		}
 		inFile.Seek(0, 0)
 		opts.OnProgress(0) // Reset Progress Bar after quick pass
 	}
@@ -318,76 +346,87 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 						
 						// EXPERT ROUTING: Entropy-based Passthrough
 						chunkEntropy := entropy.Shannon(chunk.Data)
-						if chunkEntropy > 7.8 {
+						if chunkEntropy > 7.8 || entropy.DetectHeuristicBypass(chunkEntropy, chunk.Data) {
 							// Passthrough High-Entropy Chunk (Treat as Literal immediately)
 							results[i] = processedChunk{
 								res: chunk.Data,
 								sim: 0.0, // Irrelevant for literals
 								entry: format.ChunkEntry{
-									CodebookID:   format.LiteralCodebookID,
-									DeltaSize:    uint32(len(chunk.Data)),
-									OriginalSize: uint32(chunk.Size),
+									CodebookID:    format.LiteralCodebookID,
+									CodebookIndex: format.LiteralCodebookIndex,
+									DeltaSize:     uint32(len(chunk.Data)),
+									OriginalSize:  uint32(chunk.Size),
 								},
 							}
 							continue
 						}
 
-						match, err := searcher.FindBestMatch(chunk.Data)
-						if err != nil {
-							results[i] = processedChunk{err: err}
+						var bestRes []byte
+						var bestSim float64 = -1.0
+						var bestCodeID uint64
+						var bestCbIdx uint8 = 0
+						var bestErr error
+
+						for cbIdx, searcher := range searchers {
+							match, err := searcher.FindBestMatch(chunk.Data)
+							if err != nil {
+								// error searching this codebook, try others
+								bestErr = err
+								continue
+							}
+
+							chunkBits := len(chunk.Data) * 8
+							sim := match.Similarity(chunkBits)
+							if sim > bestSim {
+								bestSim = sim
+								bestCbIdx = uint8(cbIdx)
+								
+								// Usable pattern trunc
+								usablePattern := match.Pattern
+								if len(usablePattern) > len(chunk.Data) {
+									usablePattern = usablePattern[:len(chunk.Data)]
+								}
+
+								bestCodeID = match.CodebookID
+								dynamicPatchThreshold := 0.80
+								if chunkEntropy > 6.0 {
+									dynamicPatchThreshold = 0.95
+								}
+								
+								if sim < 0.20 {
+									bestRes = chunk.Data
+									bestCodeID = format.LiteralCodebookID
+									bestCbIdx = format.LiteralCodebookIndex
+								} else if sim >= dynamicPatchThreshold {
+									patchStr := delta.Diff(chunk.Data, usablePattern)
+									xorFallback := delta.XOR(chunk.Data, usablePattern)
+									
+									const maxPatchSize = 256
+									if len(patchStr) < len(xorFallback) && len(patchStr) <= maxPatchSize {
+										bestRes = patchStr
+										bestCodeID = match.CodebookID | format.FlagIsPatch
+									} else {
+										bestRes = xorFallback
+										bestCodeID = match.CodebookID
+									}
+								} else {
+									bestRes = delta.XOR(chunk.Data, usablePattern)
+								}
+							}
+							
+							// Early Exit heuristic
+							if bestSim >= 0.95 {
+								break
+							}
+						}
+
+						if bestSim == -1.0 && bestErr != nil {
+							results[i] = processedChunk{err: bestErr}
 							continue
 						}
 
-						// Quality Threshold: if the match is too poor (< 20% similar),
-						// store the chunk as a literal instead of XOR against a bad pattern.
-						chunkBits := len(chunk.Data) * 8
-						sim := match.Similarity(chunkBits)
-
-						var residual []byte
-						var codeID uint64
-
-						// Dynamic Threshold: 80% for Text, 95% for High Entropy Binaries
-						dynamicPatchThreshold := 0.80
-						if chunkEntropy > 6.0 {
-							dynamicPatchThreshold = 0.95
-						}
-
-						// Truncate pattern to match the actual chunk data length (fixes edge blocks)
-						usablePattern := match.Pattern
-						if len(usablePattern) > len(chunk.Data) {
-							usablePattern = usablePattern[:len(chunk.Data)]
-						}
-
-						if sim < 0.20 {
-							// Literal: store chunk data as-is
-							residual = chunk.Data
-							codeID = format.LiteralCodebookID
-						} else if sim >= dynamicPatchThreshold {
-							// Fuzzy Micro-Patch: If very similar, calculate an edit script 
-							// which handles insertions and shifted sequences perfectly without destroying zeros
-							patchStr := delta.Diff(chunk.Data, usablePattern)
-							xorFallback := delta.XOR(chunk.Data, usablePattern)
-							
-							// Hard-Ceiling for Delta Pool Overflow prevention
-							const maxPatchSize = 256
-
-							// Because Zstd obliterates XOR zeros down to basically nothing,
-							// we only keep the Patch if it's strictly smaller in raw bytes than XOR
-							// AND it respects the thermodynamic limit of the chunk headers.
-							if len(patchStr) < len(xorFallback) && len(patchStr) <= maxPatchSize {
-								residual = patchStr
-								codeID = match.CodebookID | format.FlagIsPatch
-							} else {
-								// Fallback seguro nativo O(DP) cancelado
-								residual = xorFallback
-								codeID = match.CodebookID
-							}
-						} else {
-							residual = delta.XOR(chunk.Data, usablePattern)
-							codeID = match.CodebookID
-						}
-
 						// ZK Convergent Encryption (per-chunk rather than monolithic)
+						residual := bestRes
 						if opts.UseConvergentEncryption && opts.GlobalSecret != "" {
 							encryptedRes, errCrypto := crypto.ConvergentEncrypt([]byte(opts.GlobalSecret), residual)
 							if errCrypto != nil {
@@ -399,11 +438,12 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 
 						results[i] = processedChunk{
 							res: residual,
-							sim: sim,
+							sim: bestSim,
 							entry: format.ChunkEntry{
-								CodebookID:   codeID,
-								DeltaSize:    uint32(len(residual)),
-								OriginalSize: uint32(chunk.Size),
+								CodebookID:    bestCodeID,
+								CodebookIndex: bestCbIdx,
+								DeltaSize:     uint32(len(residual)),
+								OriginalSize:  uint32(chunk.Size),
 							},
 						}
 					}
@@ -496,7 +536,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		copy(header.MerkleRoot[:], root[:])
 	}
 
-	tableData := format.SerializeChunkTable(finalEntries)
+	tableData := format.SerializeChunkTable(finalEntries, header.Version)
 	if header.IsEncrypted {
 		encTable, err := crypto.Encrypt(derivedKey, tableData)
 		if err != nil {

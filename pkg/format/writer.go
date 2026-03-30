@@ -40,8 +40,8 @@ func (cw *Writer) Write(header *Header, blockTable []uint32, entries []ChunkEntr
 		}
 	}
 
-	// 3. Write Chunk Table (len(entries) * 24 bytes)
-	tableData := SerializeChunkTable(entries)
+	// 3. Write Chunk Table
+	tableData := SerializeChunkTable(entries, header.Version)
 	if _, err := cw.w.Write(tableData); err != nil {
 		return fmt.Errorf("format: write chunk table: %w", err)
 	}

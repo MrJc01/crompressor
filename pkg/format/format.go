@@ -25,6 +25,8 @@ const (
 	Version5 uint16 = 5
 	// Version6 introduces Convergent Encryption and Hierarchical Codebooks (L1, L2, L3)
 	Version6 uint16 = 6
+	// Version7 introduces Multi-Brain Routing via CodebookIndex
+	Version7 uint16 = 7
 
 	// HashSize is the size of SHA-256 hashes (32 bytes).
 	HashSize = 32
@@ -52,8 +54,17 @@ const (
 	// HeaderSizeV6 adds IsConvergentEncrypted (1) and CodebookHashes (24). Total 112+1+24 = 137 bytes.
 	HeaderSizeV6 = 137
 
-	// EntrySize is the fixed size of a ChunkEntry in the Chunk Table (24 bytes).
-	EntrySize = 8 + 8 + 4 + 4
+	// HeaderSizeV7 is identical to V6 for now, as routing happens in Chunk Table
+	HeaderSizeV7 = 137
+
+	// EntrySizeV6 is the fixed size of a ChunkEntry in the Chunk Table (24 bytes).
+	EntrySizeV6 uint32 = 24
+
+	// EntrySizeV7 introduces a 1 byte CodebookIndex for Multi-Brain Routing (25 bytes).
+	EntrySizeV7 uint32 = 25
+
+	// LiteralCodebookIndex is a sentinel value for literal uncompressed chunks
+	LiteralCodebookIndex uint8 = 255
 
 	// ChunksPerBlock is the number of chunks grouped into a single Zstd frame in V2.
 	// Must match cromlib.BlockSize / chunker.DefaultChunkSize = 16MB / 128B = 131072.
@@ -92,10 +103,11 @@ func (h *Header) NumBlocks() uint32 {
 // ChunkEntry represents a single chunk mapping in the Chunk Table.
 // It maps a Codebook codeword to a corresponding XOR residual in the Delta Pool.
 type ChunkEntry struct {
-	CodebookID   uint64 // The ID of the closest pattern in the Codebook.
-	DeltaOffset  uint64 // Offset within the DECOMPRESSED delta block.
-	DeltaSize    uint32 // Size of the delta in the decompressed pool.
-	OriginalSize uint32 // Original uncompressed size of this chunk.
+	CodebookID    uint64 // The ID of the closest pattern in the Codebook.
+	DeltaOffset   uint64 // Offset within the DECOMPRESSED delta block.
+	DeltaSize     uint32 // Size of the delta in the decompressed pool.
+	OriginalSize  uint32 // Original uncompressed size of this chunk.
+	CodebookIndex uint8  // NEW in V7: Which Codebook was used (0=L1, 1=L2, 2=L3, 255=Literal)
 }
 
 // ParseHeader parses either a V1 or V2 header based on the bytes provided.
@@ -119,13 +131,13 @@ func ParseHeader(data []byte) (*Header, error) {
 		return h, nil
 	}
 
-	if h.Version >= Version2 && h.Version <= Version6 {
+	if h.Version >= Version2 && h.Version <= Version7 {
 		minSize := HeaderSizeV2
 		if h.Version == Version4 {
 			minSize = HeaderSizeV4
 		} else if h.Version == Version5 {
 			minSize = HeaderSizeV5
-		} else if h.Version == Version6 {
+		} else if h.Version == Version6 || h.Version == Version7 {
 			minSize = HeaderSizeV6
 		}
 		if len(data) < minSize {
@@ -173,9 +185,9 @@ func (h *Header) Serialize() []byte {
 		return buf
 	}
 
-	// Default to V6 if not explicitly set and not V1
-	if h.Version < Version2 || h.Version > Version6 {
-		h.Version = Version6
+	// Default to V7 if not explicitly set and not V1
+	if h.Version < Version2 || h.Version > Version7 {
+		h.Version = Version7
 	}
 	
 	size := HeaderSizeV2
@@ -183,7 +195,7 @@ func (h *Header) Serialize() []byte {
 		size = HeaderSizeV4
 	} else if h.Version == Version5 {
 		size = HeaderSizeV5
-	} else if h.Version == Version6 {
+	} else if h.Version == Version6 || h.Version == Version7 {
 		size = HeaderSizeV6
 	}
 	
@@ -203,8 +215,8 @@ func (h *Header) Serialize() []byte {
 	
 	if h.Version >= Version4 {
 		binary.LittleEndian.PutUint32(buf[68:72], h.ChunkSize)
-		if h.Version == Version6 {
-			// In V6, CodebookHash legacy slot still gets [0] for older extractors viewing the first 80 bytes
+		if h.Version >= Version6 {
+			// In V6/V7, CodebookHash legacy slot still gets [0] for older extractors viewing the first 80 bytes
 			copy(buf[72:80], h.CodebookHashes[0][:])
 		} else {
 			copy(buf[72:80], h.CodebookHash[:])
@@ -227,35 +239,52 @@ func (h *Header) Serialize() []byte {
 	return buf
 }
 
+// GetEntrySize returns the expected ChunkEntry size given the version.
+func GetEntrySize(version uint16) uint32 {
+	if version >= Version7 {
+		return EntrySizeV7
+	}
+	return EntrySizeV6
+}
+
 // ParseChunkTable decodes the contiguous slice of ChunkEntries.
-func ParseChunkTable(data []byte, count uint32) ([]ChunkEntry, error) {
-	expectedLen := int(count) * EntrySize
+func ParseChunkTable(data []byte, count uint32, version uint16) ([]ChunkEntry, error) {
+	entrySize := int(GetEntrySize(version))
+	expectedLen := int(count) * entrySize
 	if len(data) < expectedLen {
 		return nil, errors.New("format: chunk table data too short")
 	}
 
 	entries := make([]ChunkEntry, count)
 	for i := uint32(0); i < count; i++ {
-		offset := i * EntrySize
-		entries[i] = ChunkEntry{
+		offset := int(i) * entrySize
+		entry := ChunkEntry{
 			CodebookID:   binary.LittleEndian.Uint64(data[offset : offset+8]),
 			DeltaOffset:  binary.LittleEndian.Uint64(data[offset+8 : offset+16]),
 			DeltaSize:    binary.LittleEndian.Uint32(data[offset+16 : offset+20]),
 			OriginalSize: binary.LittleEndian.Uint32(data[offset+20 : offset+24]),
 		}
+		if version >= Version7 {
+			entry.CodebookIndex = data[offset+24]
+		}
+		entries[i] = entry
 	}
 	return entries, nil
 }
 
 // Serialize encodes a slice of ChunkEntries into a contiguous byte slice.
-func SerializeChunkTable(entries []ChunkEntry) []byte {
-	buf := make([]byte, len(entries)*EntrySize)
+func SerializeChunkTable(entries []ChunkEntry, version uint16) []byte {
+	entrySize := int(GetEntrySize(version))
+	buf := make([]byte, len(entries)*entrySize)
 	for i, e := range entries {
-		offset := i * EntrySize
+		offset := i * entrySize
 		binary.LittleEndian.PutUint64(buf[offset:offset+8], e.CodebookID)
 		binary.LittleEndian.PutUint64(buf[offset+8:offset+16], e.DeltaOffset)
 		binary.LittleEndian.PutUint32(buf[offset+16:offset+20], e.DeltaSize)
 		binary.LittleEndian.PutUint32(buf[offset+20:offset+24], e.OriginalSize)
+		if version >= Version7 {
+			buf[offset+24] = e.CodebookIndex
+		}
 	}
 	return buf
 }

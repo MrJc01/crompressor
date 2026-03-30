@@ -33,9 +33,9 @@ func Analyze(r io.Reader, sampleSize int) (float64, []byte, error) {
 	return entropy, buf[:n], nil
 }
 
-// IsPassthroughRequired checks magic bytes and entropy to decide if it's not compressible.
-// It returns a boolean indicating if it should bypass Codebook/Delta processing.
-func IsPassthroughRequired(entropy float64, buf []byte) bool {
+// DetectHeuristicBypass checks magic bytes and entropy to decide if it's not compressible.
+// It returns a boolean indicating if it should bypass Codebook/Delta processing instantly.
+func DetectHeuristicBypass(entropy float64, buf []byte) bool {
 	// Magic bytes checks for heavily compressed files
 	if len(buf) > 4 {
 		// PNG
@@ -52,6 +52,18 @@ func IsPassthroughRequired(entropy float64, buf []byte) bool {
 		}
 		// GZIP
 		if buf[0] == 0x1F && buf[1] == 0x8B {
+			return true
+		}
+		// ELF Binaries
+		if buf[0] == 0x7F && buf[1] == 0x45 && buf[2] == 0x4C && buf[3] == 0x46 {
+			return true
+		}
+		// JPEG/JPG
+		if buf[0] == 0xFF && buf[1] == 0xD8 && buf[2] == 0xFF {
+			return true
+		}
+		// GIF
+		if string(buf[0:4]) == "GIF8" {
 			return true
 		}
 	}

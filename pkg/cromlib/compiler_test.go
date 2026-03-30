@@ -386,7 +386,7 @@ func TestUnpack_CorruptBlock(t *testing.T) {
 	h, _, _, _ := format.NewReader(bytes.NewReader(cromData)).ReadMetadata("")
 	
 	// Corrupt a byte right after the chunk table (start of delta pool)
-	tableSize := int(h.ChunkCount) * format.EntrySize
+	tableSize := int(h.ChunkCount) * int(format.GetEntrySize(h.Version))
 	if h.IsEncrypted { tableSize += 28 }
 	hSize := format.HeaderSizeV2
 	if h.Version == format.Version4 { 

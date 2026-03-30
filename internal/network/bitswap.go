@@ -180,7 +180,7 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 	blockTableSpace := make([]byte, numBlocks*4)
 	outFile.Write(blockTableSpace)
 
-	chunkTableSpace := make([]byte, manifest.ChunkCount*format.EntrySize)
+	chunkTableSpace := make([]byte, manifest.ChunkCount*format.GetEntrySize(format.Version2))
 	outFile.Write(chunkTableSpace)
 
 	finalEntries := make([]format.ChunkEntry, manifest.ChunkCount)
@@ -242,7 +242,7 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 		binary.LittleEndian.PutUint32(blockTableRaw[i*4:], size)
 	}
 	outFile.Write(blockTableRaw)
-	outFile.Write(format.SerializeChunkTable(finalEntries))
+	outFile.Write(format.SerializeChunkTable(finalEntries, format.Version2))
 
 	return nil
 }

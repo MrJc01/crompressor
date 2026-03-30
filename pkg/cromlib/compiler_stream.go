@@ -232,7 +232,7 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 	outFile.Write(blockTableRaw)
 
 	// Write Chunk Table
-	chunkTableData := format.SerializeChunkTable(allEntries)
+	chunkTableData := format.SerializeChunkTable(allEntries, format.Version5)
 	outFile.Write(chunkTableData)
 
 	// Copy the compressed delta pool from temp
