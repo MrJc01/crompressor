@@ -10,7 +10,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║      Mestre de Auditoria CROM (Testes 01-07)         ║"
+echo "║      Mestre de Auditoria CROM (Testes 01-10)         ║"
 echo "╚══════════════════════════════════════════════════════╝"
 
 echo "🔨 Construindo Crompressor na RAIZ..."
@@ -50,4 +50,22 @@ cd 07-benchmark_comparativo
 bash run_benchmark.sh
 cd ..
 
-echo "✅ [ALL DONE] Auditoria de 01 a 07 concluída com sucesso."
+# 4. 08: Cloud VFS Latency
+echo "▶️ Iniciando Bateria 08 (Cloud VFS Latency)..."
+cd 08-cloud_vfs_latency/scripts
+bash 01_cloud_vs_local.sh
+cd ../../
+
+# 5. 09: Kademlia DHT Routing Efficiency 
+echo "▶️ Iniciando Bateria 09 (Kademlia DHT Scale)..."
+cd 09-p2p_dht_scale/scripts
+bash 01_dht_routing.sh
+cd ../../
+
+# 6. 10: Entropy Shield Validation
+echo "▶️ Iniciando Bateria 10 (Entropy Shield /dev/urandom)..."
+cd 10-entropy_shield/scripts
+bash 01_entropy_stress.sh
+cd ../../
+
+echo "✅ [ALL DONE] Auditoria de 01 a 10 concluída com sucesso."
