@@ -54,3 +54,6 @@ A seleção automática de codebooks elimina o risco de usar um "cérebro" inade
 
 ## ✅ Conclusão de Auditoria
 A nova arquitetura V10 detém de $18.6K/mês poupados operando num volume de PB no S3. O ganho real foi que eliminamos radicalmente a alocação volumosa de memórias necessárias durante buscas (Dicionários reduzidos em até 98%). O Crompressor escala barato.
+
+## 🔍 V11 — Storage "Zero-K" e Delta Patching
+No Sprint 11 observamos a mitigação contundente de entropias granulares: Como o compilador alterna heuristicamente entre XOR O(1) e EditScripts de Levenshtein (Micro-Patching) durante `sim >= 80%`, pequenos shifts contextuais (ex: log rotate massivo, adições em linhas parciais) evitam estourar o buffer residual de 128 bytes, enxugando dramaticamente a compressão subseqüente Zstd e economizando valiosos kBytes adicionais no repositório final de armazenamento Frio.

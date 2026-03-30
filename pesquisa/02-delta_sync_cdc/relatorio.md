@@ -35,3 +35,7 @@ O algoritmo compreendeu e extraiu super-tokens globais como estruturas "INSERT I
 
 ## 🛡️ Conclusão de Auditoria
 A transição BPE foi não apenas bem-sucedida, como cirúrgica no CDC. Com apenas 74 Super-Tokens usados, um Node Lite no P2P que receba o Dump SQL precisará de KBínfimos de RAM para alocar o dicionário "Universal" necessário para ler a timeline temporal de backups incrementais do banco.
+
+## 🔍 V11 — Micro-Patching & Grep Neural
+- **Micro-Patching**: O compilador V11 agora detecta chunks com similaridade ≥ 80% e gera edit scripts (Levenshtein Diff) como alternativa ao XOR, escolhendo o menor. Isso beneficia especialmente dumps SQL onde `INSERT INTO` varia apenas no valor.
+- **Grep Neural**: `crompressor grep "INSERT" -i dump.crom -c dump.cromdb` localiza todas as ocorrências sem descomprimir o arquivo.

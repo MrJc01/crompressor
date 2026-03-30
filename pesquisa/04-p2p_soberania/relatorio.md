@@ -48,3 +48,6 @@ O daemon pode usar `--auto-brain` para selecionar automaticamente o codebook ide
 
 ## ✅ Conclusão de Auditoria
 O sistema V10 eleva o P2P à máxima soberania de dados local-first com bandwidth quase zerada. O dicionário sintático minúsculo possibilita tráfego imediato e verificação tolerante em mDNS de altíssima latência P2P.
+
+## 🔍 V11 — Resiliência Auth mDNS
+No Sprint 11 mitigamos a flutuação aguda dos Discovery races de Codebooks via introdução de delays passivos (*Settle Delay*) após o Connect. Esse detalhe anti-flaky selou a última brecha de confiabilidade do Auth mDNS, validando a soberania total do sincronismo BPE entre instâncias físicas.

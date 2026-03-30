@@ -59,6 +59,9 @@ const (
 	// Must match cromlib.BlockSize / chunker.DefaultChunkSize = 16MB / 128B = 131072.
 	ChunksPerBlock = 131072
 
+	// FlagIsPatch is applied to CodebookID (bit 60) to indicate the residual is a Micro-Patch (MyersDiff) instead of XOR.
+	FlagIsPatch uint64 = 1 << 60
+
 	// LiteralCodebookID is a sentinel value (MAX_UINT64) used to mark chunks
 	// where no good codebook match was found. These chunks are stored verbatim
 	// in the delta pool without XOR against a pattern.

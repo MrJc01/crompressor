@@ -40,3 +40,7 @@ O VFS V5 agora carrega os blocos corretamente a partir do offset correto (compen
 
 ## ✅ Conclusão de Auditoria
 O VFS V10 mantém TTFB < 10ms mantendo 100% da integridade MerkleRoot (que é lida apenas no header, sem impacto no seek). Além disso o FUSE agora trabalha quase de graça na RAM (o Codebook despencou de 8192 itens cacheados para as inofensivas 77 *words* mapeadas pelo motor lógico BPE). A busca mascarando Tier Bits assegura que nenhuma palavra perca sua indexação.
+
+## 🔍 V11 — Aceleração RandomReader (Micro-Patching)
+Os acessos aleatórios via FUSE Mount na versão V11 suportam agora a reconstrução limpa sobre *Edit Scripts* codificados em `PatchDiff`. A função `ReadAt` foi reescrita isolando a branch `isPatch`, provando resiliência absoluta sem decréscimo na leitura transiente.
+

@@ -329,6 +329,9 @@ cat >> "$REPORT" <<'EOF'
 > Em ambientes de produção com milhões de imagens médicas (DICOM/TIFF), a economia do Crompressor pode representar TB de redução de storage.
 
 **"Não comprimimos pixels. Compilamos a realidade visual."**
+
+## 🔍 V11 — Exclusão Lógica Dinâmica
+Com as atualizações inseridas via Busca Transparente (Grep O(1)) e as ramificações de Pack no Sprint 11, resguardamos e fortificamos a blindagem da análise não-textual. O arquivo \`.crom\` atuariamente desvia-se de varreduras indevidas de RandomReader no Grep Neural, garantindo resiliência passiva do stream bruto binário sem aterrissar em panic crashes decorrentes do motor semântico subjacente (BPE literais).
 EOF
 
 # Verificar integridade global

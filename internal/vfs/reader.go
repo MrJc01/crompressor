@@ -133,8 +133,9 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 		if entry.CodebookID == format.LiteralCodebookID {
 			reconstructedChunk = res
 		} else {
-			// Mask out MultiSearcher tier bits (upper 2 bits of uint64)
-			cleanID := entry.CodebookID & 0x3FFFFFFFFFFFFFFF
+			isPatch := (entry.CodebookID & format.FlagIsPatch) != 0
+			// Mask out Tier bits and Patch flag (clear upper 4 bits)
+			cleanID := entry.CodebookID & 0x0FFFFFFFFFFFFFFF
 			pattern, err := rr.cb.Lookup(cleanID)
 			if err != nil {
 				return bytesRead, fmt.Errorf("vfs: lookup codeword %d: %w", cleanID, err)
@@ -144,25 +145,18 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 			if uint32(len(usablePattern)) > entry.OriginalSize {
 				usablePattern = usablePattern[:entry.OriginalSize]
 			}
-			if uint32(len(res)) > entry.OriginalSize {
-				res = res[:entry.OriginalSize]
-			}
 
-			// Ensure usablePattern and res have the same length for XOR (delta.Apply)
-			// Pad the shorter slice if needed to prevent slice bounds panic
-			targetLen := int(entry.OriginalSize)
-			if len(usablePattern) < targetLen {
-				padded := make([]byte, targetLen)
-				copy(padded, usablePattern)
-				usablePattern = padded
+			if isPatch {
+				reconstructedChunk, err = delta.ApplyPatch(usablePattern, res)
+				if err != nil {
+					reconstructedChunk = res
+				}
+			} else {
+				if uint32(len(res)) > entry.OriginalSize {
+					res = res[:entry.OriginalSize]
+				}
+				reconstructedChunk = delta.Apply(usablePattern, res)
 			}
-			if len(res) < targetLen {
-				padded := make([]byte, targetLen)
-				copy(padded, res)
-				res = padded
-			}
-
-			reconstructedChunk = delta.Apply(usablePattern, res)
 		}
 
 		// Clamp reconstructedChunk to entry.OriginalSize

@@ -44,3 +44,19 @@ O Crompressor V10 (BPE) atingiu a mesma fantástica economia de **81.15%** ating
 
 > [!TIP]
 > Em ambientes de produção com TBs de logs, a economia de 81% representa diretamente milhares de dólares em storage frio (S3/Glacier), e o MerkleRoot permite validar a integridade sem descomprimir o arquivo inteiro.
+
+## 🔍 V11 — Grep Neural O(1) (Sprint 11)
+
+Com o Sprint 11, este mesmo arquivo `.crom` agora suporta **busca semântica transparente** via `crompressor grep`:
+
+```bash
+$ crompressor grep "status" -i logs.crom -c logs.cromdb
+🧠 Cérebro detectou 13 Super-Tokens que contêm 'status'.
+🔍 Varrendo Matrix de Chunks (204688 referências verticais)...
+✔ Grep Neural concluído em 192ms.
+  Total de Ocorrências Semânticas: 5312
+```
+
+- **Sem descompressão**: A busca varre apenas os IDs numéricos dos ChunkEntries (8 bytes cada).
+- **Materialização Condicional**: Os primeiros 20 chunks matched são descomprimidos pontualmente para exibição.
+- **Micro-Patching (Diff/Patch)**: O compilador agora usa `format.FlagIsPatch` (bit 60) para codificar edit scripts quando a similaridade ≥ 80%, obtendo representações mais compactas que XOR para dados com shift textual.

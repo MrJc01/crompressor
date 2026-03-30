@@ -83,9 +83,20 @@ func TestTwoNodeSync(t *testing.T) {
 		t.Fatalf("Node B failed to connect to A: %v", err)
 	}
 
-	// 7. Sovereignty Handshake
-	if err := nodeB.AuthenticatePeer(ctx, nodeA.PeerID()); err != nil {
-		t.Fatalf("Authentication failed: %v", err)
+	// Allow protocol handlers to fully register after connection
+	time.Sleep(500 * time.Millisecond)
+
+	// 7. Sovereignty Handshake (retry up to 3 times to handle mDNS race)
+	var authErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		authErr = nodeB.AuthenticatePeer(ctx, nodeA.PeerID())
+		if authErr == nil {
+			break
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	if authErr != nil {
+		t.Fatalf("Authentication failed after retries: %v", authErr)
 	}
 
 	// 8. Node B requests Sync

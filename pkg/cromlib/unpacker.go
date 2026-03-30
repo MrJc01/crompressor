@@ -210,8 +210,9 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 						}
 					}
 
-					// Mask out MultiSearcher tier bits before looking up
-					cleanID := targetID & 0x3FFFFFFFFFFFFFFF
+					isPatch := (targetID & format.FlagIsPatch) != 0
+					// Mask out Tier bits and Patch flag (clear upper 4 bits)
+					cleanID := targetID & 0x0FFFFFFFFFFFFFFF
 					pattern, err := cb.Lookup(cleanID)
 					if err != nil {
 						return fmt.Errorf("unpack: lookup codeword %d: %w", cleanID, err)
@@ -221,11 +222,23 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 					if uint32(len(usablePattern)) > entry.OriginalSize {
 						usablePattern = usablePattern[:entry.OriginalSize]
 					}
-					if uint32(len(res)) > entry.OriginalSize {
-						res = res[:entry.OriginalSize]
+					
+					if isPatch {
+						// Apply Edit Script
+						reconstructedChunk, err = delta.ApplyPatch(usablePattern, res)
+						if err != nil && opts.Strict {
+							return fmt.Errorf("unpack: failed to apply patch: %w", err)
+						} else if err != nil {
+							// fallback
+							reconstructedChunk = res
+						}
+					} else {
+						// Apply XOR
+						if uint32(len(res)) > entry.OriginalSize {
+							res = res[:entry.OriginalSize]
+						}
+						reconstructedChunk = delta.Apply(usablePattern, res)
 					}
-
-					reconstructedChunk = delta.Apply(usablePattern, res)
 				}
 
 				if err := writeOut(reconstructedChunk); err != nil {
@@ -253,14 +266,20 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 			if targetID == format.LiteralCodebookID {
 				reconstructedChunk = res
 			} else {
-				cleanID := targetID & 0x3FFFFFFFFFFFFFFF
+				isPatch := (targetID & format.FlagIsPatch) != 0
+				cleanID := targetID & 0x0FFFFFFFFFFFFFFF
 				pattern, err := cb.Lookup(cleanID)
 				if err != nil { return err }
 
 				usablePattern := pattern
 				if uint32(len(usablePattern)) > entry.OriginalSize { usablePattern = usablePattern[:entry.OriginalSize] }
-				if uint32(len(res)) > entry.OriginalSize { res = res[:entry.OriginalSize] }
-				reconstructedChunk = delta.Apply(usablePattern, res)
+				
+				if isPatch {
+					reconstructedChunk, _ = delta.ApplyPatch(usablePattern, res)
+				} else {
+					if uint32(len(res)) > entry.OriginalSize { res = res[:entry.OriginalSize] }
+					reconstructedChunk = delta.Apply(usablePattern, res)
+				}
 			}
 			if err := writeOut(reconstructedChunk); err != nil { return err }
 		}

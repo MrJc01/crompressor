@@ -65,14 +65,9 @@ func (ls *LSHSearcher) Restrict(allowed []uint64) {
 }
 
 // computeLSH generates a 16-bit locality sensitive hash.
-// For binary Hamming space, an exact projection (e.g., first 16 bits)
-// serves as an extremely fast and perfectly sensitive spatial clustering
-// mechanism for exact and near-exact matches in those coordinates.
-//
-// In a full production model, multiple hash tables (forests) would be used.
+// Uses the first 2 bytes as a fast projection vector for bucket assignment.
 func computeLSH(data []byte) uint16 {
 	if len(data) >= 2 {
-		// Use the first 2 bytes as the projection vector
 		return uint16(data[0]) | uint16(data[1])<<8
 	}
 	return 0

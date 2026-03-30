@@ -68,6 +68,7 @@ mapas de referências determinísticos com fidelidade bit-a-bit.
 	rootCmd.AddCommand(daemonCmd())
 	rootCmd.AddCommand(shareCmd())
 	rootCmd.AddCommand(cromfsCmd())
+	rootCmd.AddCommand(grepCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -935,5 +936,37 @@ func cromfsCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&mountPoint, "mountpoint", "m", "", "Diretório virtual /mnt/cromfs")
 	cmd.Flags().StringVarP(&outPool, "out-pool", "o", "", "Onde salvar (.crom)")
 	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Caminho do Codebook base")
+	return cmd
+}
+
+func grepCmd() *cobra.Command {
+	var inputPath, codebookPath string
+
+	cmd := &cobra.Command{
+		Use:   "grep <query>",
+		Short: "Grep O(1) diretamente nos Super-Tokens do arquivo .crom (Neural Search)",
+		Long:  `Traduz uma query para seu ID BPE Numérico e varre a Matrix de Ocorrências ignorando a descompressão local. Pesquisa instantânea em qualquer volume de dados.`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if inputPath == "" || codebookPath == "" {
+				return fmt.Errorf("flags --input e --codebook são obrigatórias na busca Neural")
+			}
+			target := args[0]
+			
+			fmt.Println("╔═══════════════════════════════════════════╗")
+			fmt.Println("║       CROM SEARCH (Grep Transparente)     ║")
+			fmt.Println("╠═══════════════════════════════════════════╣")
+			fmt.Printf("║  Target:   %-30s ║\n", target)
+			fmt.Printf("║  Input:    %-30s ║\n", inputPath)
+			fmt.Printf("║  Codebook: %-30s ║\n", codebookPath)
+			fmt.Println("╚═══════════════════════════════════════════╝")
+
+			return cromlib.Grep(target, inputPath, codebookPath)
+		},
+	}
+
+	cmd.Flags().StringVarP(&inputPath, "input", "i", "", "Caminho do arquivo .crom alvo")
+	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Caminho do Codebook (Dicionário de Referência)")
+	
 	return cmd
 }

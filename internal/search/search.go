@@ -43,7 +43,7 @@ type Searcher interface {
 }
 
 // hammingDistance calculates the number of mismatching bits between two byte slices.
-// Optimized to compare 64-bit blocks for massive performance gains.
+// Optimized to compare 64-bit blocks for massive performance gains. O(N).
 func hammingDistance(a, b []byte) int {
 	dist := 0
 	minLen := len(a)

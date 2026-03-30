@@ -350,6 +350,22 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 							// Literal: store chunk data as-is
 							residual = chunk.Data
 							codeID = format.LiteralCodebookID
+						} else if sim >= 0.80 {
+							// Fuzzy Micro-Patch: If very similar, calculate an edit script 
+							// which handles insertions and shifted sequences perfectly without destroying zeros
+							patchStr := delta.Diff(chunk.Data, match.Pattern)
+							xorFallback := delta.XOR(chunk.Data, match.Pattern)
+							
+							// Because Zstd obliterates XOR zeros down to basically nothing,
+							// we only keep the Patch if it's strictly smaller in raw bytes than XOR.
+							// Typically MyersDiff wins gracefully on shifted text.
+							if len(patchStr) < len(xorFallback) {
+								residual = patchStr
+								codeID = match.CodebookID | format.FlagIsPatch
+							} else {
+								residual = xorFallback
+								codeID = match.CodebookID
+							}
 						} else {
 							residual = delta.XOR(chunk.Data, match.Pattern)
 							codeID = match.CodebookID
