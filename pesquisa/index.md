@@ -14,6 +14,9 @@ Este arquivo é o ponto central de auditoria para todos os experimentos de compr
 - 📄 [05 Tco Storage Frio](./05-tco_storage_frio/relatorio.md)
 - 📄 [06 Image Format Analysis](./06-image_format_analysis/relatorio.md)
 - 📄 [07 Benchmark Comparativo](./07-benchmark_comparativo/Relatorio_Gzip_Zstd_Crompressor.md)
+- 📄 [08 Cloud Vfs Latency](./08-cloud_vfs_latency/relatorio.md)
+- 📄 [09 P2p Dht Scale](./09-p2p_dht_scale/relatorio.md)
+- 📄 [10 Entropy Shield](./10-entropy_shield/relatorio.md)
 
 ---
 

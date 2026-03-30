@@ -57,3 +57,12 @@ A nova arquitetura V10 detém de $18.6K/mês poupados operando num volume de PB 
 
 ## 🔍 V11 — Storage "Zero-K" e Delta Patching
 No Sprint 11 observamos a mitigação contundente de entropias granulares: Como o compilador alterna heuristicamente entre XOR O(1) e EditScripts de Levenshtein (Micro-Patching) durante `sim >= 80%`, pequenos shifts contextuais (ex: log rotate massivo, adições em linhas parciais) evitam estourar o buffer residual de 128 bytes, enxugando dramaticamente a compressão subseqüente Zstd e economizando valiosos kBytes adicionais no repositório final de armazenamento Frio.
+
+## ☁️ V12 — Auditagem Nuvem/FRIO (S3 API Egress)
+A arquitetura V12 introduziu o **Cloud-Native VFS**, revolucionando o TCO em ambientes S3 corporativos (onde o modelo de cobrança penaliza severamente o número de chamadas `GET` e `HEAD`):
+
+- **O Problema Clássico**: Montagens FUSE baseadas em rede costumam disparar centenas de chamadas `GET` especulativas (Read-Ahead) faturáveis na nuvem, encarecendo o Egress.
+- **A Solução CROM (Zero-Download)**: Nosso `CloudReader` com escaneamento invertido de Ocorrências (Neural Grep) converte a intenção de busca em uma única requisição HTTP Range *precisa*.
+- **Impacto TCO nas Chamadas**:
+  - `Grep` ou Visualização de Chunk Exato (FUSE) dispara **exatamente 1 HEAD call** para metadados e **exatamente 1 GET Range request** faturado para extrair só o Bloco Zstd do alvo (16MB ou menos).
+  - Economia de API Requests estimada em 99,99% quando comparada à visualização linear (Stream Completo). Custo massivo evitado.

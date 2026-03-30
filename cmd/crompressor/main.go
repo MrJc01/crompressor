@@ -526,12 +526,21 @@ func mountCmd() *cobra.Command {
 				return fmt.Errorf("flags --input, --mountpoint e --codebook são obrigatórias")
 			}
 
+			isCloud := len(input) > 7 && (input[:7] == "http://" || input[:8] == "https://")
+
 			fmt.Println("╔═══════════════════════════════════════════╗")
-			fmt.Println("║       CROM VFS (Virtual Filesystem)       ║")
+			if isCloud {
+				fmt.Println("║   CROM VFS (Cloud-Native Remote Mount)    ║")
+			} else {
+				fmt.Println("║       CROM VFS (Virtual Filesystem)       ║")
+			}
 			fmt.Println("╠═══════════════════════════════════════════╣")
 			fmt.Printf("║  Input:    %-30s ║\n", input)
 			fmt.Printf("║  Mount:    %-30s ║\n", mountPoint)
 			fmt.Printf("║  Codebook: %-30s ║\n", codebookPath)
+			if isCloud {
+				fmt.Printf("║  Mode:     HTTP Range Requests (S3/CDN)   ║\n")
+			}
 			if encryptionKey != "" {
 				fmt.Printf("║  Security: AES-256-GCM Enabled            ║\n")
 			}
@@ -553,7 +562,7 @@ func mountCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&input, "input", "i", "", "Caminho do arquivo .crom")
+	cmd.Flags().StringVarP(&input, "input", "i", "", "Caminho do arquivo .crom (aceita URLs HTTP/HTTPS para montagem remota S3/CDN)")
 	cmd.Flags().StringVarP(&mountPoint, "mountpoint", "m", "", "Diretório de montagem (deve ser vazio)")
 	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Caminho do Codebook (.cromdb)")
 	cmd.Flags().StringVar(&encryptionKey, "encrypt", "", "Chave/Senha para descriptografia")
@@ -953,19 +962,28 @@ func grepCmd() *cobra.Command {
 			}
 			target := args[0]
 			
+			isCloud := len(inputPath) > 7 && (inputPath[:7] == "http://" || inputPath[:8] == "https://")
+
 			fmt.Println("╔═══════════════════════════════════════════╗")
-			fmt.Println("║       CROM SEARCH (Grep Transparente)     ║")
+			if isCloud {
+				fmt.Println("║   CROM SEARCH (Remote Neural Grep S3)    ║")
+			} else {
+				fmt.Println("║       CROM SEARCH (Grep Transparente)     ║")
+			}
 			fmt.Println("╠═══════════════════════════════════════════╣")
 			fmt.Printf("║  Target:   %-30s ║\n", target)
 			fmt.Printf("║  Input:    %-30s ║\n", inputPath)
 			fmt.Printf("║  Codebook: %-30s ║\n", codebookPath)
+			if isCloud {
+				fmt.Printf("║  Mode:     HTTP Range (Zero-Download)     ║\n")
+			}
 			fmt.Println("╚═══════════════════════════════════════════╝")
 
 			return cromlib.Grep(target, inputPath, codebookPath)
 		},
 	}
 
-	cmd.Flags().StringVarP(&inputPath, "input", "i", "", "Caminho do arquivo .crom alvo")
+	cmd.Flags().StringVarP(&inputPath, "input", "i", "", "Caminho do arquivo .crom alvo (aceita URLs HTTP/HTTPS para busca remota S3/CDN)")
 	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Caminho do Codebook (Dicionário de Referência)")
 	
 	return cmd

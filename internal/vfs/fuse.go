@@ -3,12 +3,14 @@ package vfs
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
 
 	"github.com/MrJc01/crompressor/internal/codebook"
+	"github.com/MrJc01/crompressor/internal/remote"
 	"github.com/MrJc01/crompressor/pkg/format"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -77,24 +79,47 @@ func Mount(cromFile string, mountPoint string, codebookFile string, encryptionKe
 	}
 	defer cb.Close()
 
-	file, err := os.Open(cromFile)
-	if err != nil {
-		return fmt.Errorf("mount: failed to open .crom: %w", err)
-	}
-	defer file.Close()
+	var file io.ReaderAt
+	var fileSize int64
+	var fileCloser io.Closer
 
-	info, err := file.Stat()
-	if err != nil {
-		return err
+	if strings.HasPrefix(cromFile, "http://") || strings.HasPrefix(cromFile, "https://") {
+		cr, err := remote.NewCloudReader(cromFile)
+		if err != nil {
+			return fmt.Errorf("mount: failed to init cloud reader: %w", err)
+		}
+		file = cr
+		fileSize = cr.Size()
+		fileCloser = io.NopCloser(nil) // CloudReader handles its own transient connections
+	} else {
+		localFile, err := os.Open(cromFile)
+		if err != nil {
+			return fmt.Errorf("mount: failed to open .crom: %w", err)
+		}
+		info, err := localFile.Stat()
+		if err != nil {
+			localFile.Close()
+			return err
+		}
+		file = localFile
+		fileSize = info.Size()
+		fileCloser = localFile
+	}
+	defer fileCloser.Close()
+
+	// io.Reader is fulfilled by both os.File and CloudReader
+	readerInterface, ok := file.(io.Reader)
+	if !ok {
+		return fmt.Errorf("mount: file interface does not implement io.Reader")
 	}
 
-	reader := format.NewReader(file)
+	reader := format.NewReader(readerInterface)
 	header, blockTable, entries, err := reader.ReadMetadata(encryptionKey)
 	if err != nil {
 		return fmt.Errorf("mount: failed to parse format metadata: %w", err)
 	}
 
-	randomReader, err := NewRandomReader(file, info.Size(), header, blockTable, entries, cb, encryptionKey)
+	randomReader, err := NewRandomReader(file, fileSize, header, blockTable, entries, cb, encryptionKey)
 	if err != nil {
 		return fmt.Errorf("mount: failed to init random reader: %w", err)
 	}

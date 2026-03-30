@@ -36,12 +36,14 @@ func (cr *Reader) ReadMetadata(encryptionKey string) (*Header, []uint32, []Chunk
 		if _, err := io.ReadFull(cr.r, headerBuf[6:]); err != nil {
 			return nil, nil, nil, fmt.Errorf("format: read v1 header: %w", err)
 		}
-	} else if version >= Version2 && version <= Version5 {
+	} else if version >= Version2 && version <= Version6 {
 		size := HeaderSizeV2
 		if version == Version4 {
 			size = HeaderSizeV4
 		} else if version == Version5 {
 			size = HeaderSizeV5
+		} else if version == Version6 {
+			size = HeaderSizeV6
 		}
 		headerBuf = make([]byte, size)
 		copy(headerBuf, metaBuf)

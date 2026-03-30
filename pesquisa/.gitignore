@@ -18,6 +18,9 @@
 !05-tco_storage_frio/
 !06-image_format_analysis/
 !07-benchmark_comparativo/
+!08-cloud_vfs_latency/
+!09-p2p_dht_scale/
+!10-entropy_shield/
 
 # 🚫 Ignorar dados binários e logs dentro das pastas de teste
 01-logs_redundancia/*
@@ -42,6 +45,22 @@
 # 🚫 Ignorar datasets reais (apenas README nestas pastas)
 datasets/*
 !datasets/*.md
+
+# 🚫 Regras Pesquisas Cloud/P2P
+08-cloud_vfs_latency/*
+!08-cloud_vfs_latency/*.md
+!08-cloud_vfs_latency/scripts/
+!08-cloud_vfs_latency/scripts/*.sh
+
+09-p2p_dht_scale/*
+!09-p2p_dht_scale/*.md
+!09-p2p_dht_scale/scripts/
+!09-p2p_dht_scale/scripts/*.sh
+
+10-entropy_shield/*
+!10-entropy_shield/*.md
+!10-entropy_shield/scripts/
+!10-entropy_shield/scripts/*.sh
 
 # Temporários e Dumps
 *.log

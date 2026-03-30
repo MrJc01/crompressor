@@ -346,28 +346,44 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 						var residual []byte
 						var codeID uint64
 
+						// Dynamic Threshold: 80% for Text, 95% for High Entropy Binaries
+						dynamicPatchThreshold := 0.80
+						if chunkEntropy > 6.0 {
+							dynamicPatchThreshold = 0.95
+						}
+
+						// Truncate pattern to match the actual chunk data length (fixes edge blocks)
+						usablePattern := match.Pattern
+						if len(usablePattern) > len(chunk.Data) {
+							usablePattern = usablePattern[:len(chunk.Data)]
+						}
+
 						if sim < 0.20 {
 							// Literal: store chunk data as-is
 							residual = chunk.Data
 							codeID = format.LiteralCodebookID
-						} else if sim >= 0.80 {
+						} else if sim >= dynamicPatchThreshold {
 							// Fuzzy Micro-Patch: If very similar, calculate an edit script 
 							// which handles insertions and shifted sequences perfectly without destroying zeros
-							patchStr := delta.Diff(chunk.Data, match.Pattern)
-							xorFallback := delta.XOR(chunk.Data, match.Pattern)
+							patchStr := delta.Diff(chunk.Data, usablePattern)
+							xorFallback := delta.XOR(chunk.Data, usablePattern)
 							
+							// Hard-Ceiling for Delta Pool Overflow prevention
+							const maxPatchSize = 256
+
 							// Because Zstd obliterates XOR zeros down to basically nothing,
-							// we only keep the Patch if it's strictly smaller in raw bytes than XOR.
-							// Typically MyersDiff wins gracefully on shifted text.
-							if len(patchStr) < len(xorFallback) {
+							// we only keep the Patch if it's strictly smaller in raw bytes than XOR
+							// AND it respects the thermodynamic limit of the chunk headers.
+							if len(patchStr) < len(xorFallback) && len(patchStr) <= maxPatchSize {
 								residual = patchStr
 								codeID = match.CodebookID | format.FlagIsPatch
 							} else {
+								// Fallback seguro nativo O(DP) cancelado
 								residual = xorFallback
 								codeID = match.CodebookID
 							}
 						} else {
-							residual = delta.XOR(chunk.Data, match.Pattern)
+							residual = delta.XOR(chunk.Data, usablePattern)
 							codeID = match.CodebookID
 						}
 
