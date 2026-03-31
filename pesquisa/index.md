@@ -1,4 +1,4 @@
-# 🧪 Pesquisa e Viabilidade Técnica: Crompressor V20
+# 🧪 Pesquisa e Viabilidade Técnica: Crompressor V21
 
 Este arquivo é o ponto central de auditoria para todos os experimentos de compressão soberana.
 
@@ -36,6 +36,16 @@ Este arquivo é o ponto central de auditoria para todos os experimentos de compr
 - 📄 [25 Zero Knowledge Codebook Poisoning](./25-zero_knowledge_codebook_poisoning/relatorio.md)
 - 📄 [26 Forward Error Correction P2P](./26-forward_error_correction_p2p/relatorio.md)
 - 📄 [27 Quantum Resistant GossipSub](./27-quantum_resistant_gossipsub/relatorio.md)
+- 📄 [28 Cross Platform Compilation](./28-cross_platform_compilation/relatorio.md)
+- 📄 [29 Video Stream Delta](./29-video_stream_delta/relatorio.md)
+- 📄 [30 Game Assets Deduplication](./30-game_assets_deduplication/relatorio.md)
+- 📄 [31 OS Level Caching](./31-os_level_caching/relatorio.md)
+- 📄 [32 IPC UDS Latency](./32-ipc_uds_latency/relatorio.md)
+- 📄 [33 Satellite Simulation FEC](./33-satellite_simulation_fec/relatorio.md)
+- 📄 [34 Thermal Throttling Edge](./34-thermal_throttling_edge/relatorio.md)
+- 📄 [35 Hybrid Quantum Bench](./35-hybrid_quantum_bench/relatorio.md)
+- 📄 [36 CUDA Sandbox Validation](./36-cuda_sandbox_validation/relatorio.md)
+- 📄 [37 Exabyte Codebook Scale](./37-exabyte_codebook_scale/relatorio.md)
 
 ---
 
