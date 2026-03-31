@@ -172,16 +172,16 @@ function run_model_chat() {
     # Download do modelo
     if [ ! -f "$file_path" ]; then
         echo -e "${YELLOW}Baixando $model_name...${RESET}"
-        wget --show-progress -O "$file_path" "https://huggingface.co/$repo_id/resolve/main/$file_name"
+        wget -c --show-progress -O "$file_path" "https://huggingface.co/$repo_id/resolve/main/$file_name"
     fi
     
     # Validar integridade
     if [ -f "$file_path" ]; then
         local actual_mb=$(du -m "$file_path" | cut -f1)
         if [ "$actual_mb" -lt "$min_size_mb" ]; then
-            echo -e "${RED}⚠️  Arquivo corrompido (${actual_mb}MB < ${min_size_mb}MB). Re-baixando...${RESET}"
+            echo -e "${RED}⚠️  Arquivo corrompido ou incompleto (${actual_mb}MB < ${min_size_mb}MB). Re-baixando...${RESET}"
             rm -f "$file_path" "${file_path}.crom"
-            wget --show-progress -O "$file_path" "https://huggingface.co/$repo_id/resolve/main/$file_name"
+            wget -c --show-progress -O "$file_path" "https://huggingface.co/$repo_id/resolve/main/$file_name"
         fi
     fi
     
@@ -372,27 +372,27 @@ while true; do
         1) run_model_chat "Qwen-2.5 0.5B" \
             "Qwen/Qwen2.5-0.5B-Instruct-GGUF" \
             "qwen2.5-0.5b-instruct-q4_k_m.gguf" \
-            "true" 2048 20 ;;
+            "true" 2048 350 ;;
         2) run_model_chat "TinyLlama 1.1B" \
             "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF" \
             "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf" \
-            "true" 2048 500 ;;
+            "true" 2048 600 ;;
         3) run_model_chat "Llama-3.2 1B" \
             "bartowski/Llama-3.2-1B-Instruct-GGUF" \
             "Llama-3.2-1B-Instruct-Q4_K_M.gguf" \
-            "true" 2048 600 ;;
+            "true" 2048 700 ;;
         4) run_model_chat "DeepSeek-R1 1.5B" \
             "bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF" \
             "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf" \
-            "true" 1024 800 ;;
+            "true" 1024 1000 ;;
         5) run_model_chat "Phi-3 Mini 3.8B" \
             "bartowski/Phi-3-mini-4k-instruct-GGUF" \
             "Phi-3-mini-4k-instruct-Q4_K_M.gguf" \
-            "true" 512 1800 ;;
+            "true" 512 2000 ;;
         6) run_model_chat "DeepSeek-R1 7B" \
             "bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF" \
             "DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf" \
-            "true" 512 3500 ;;
+            "true" 512 4000 ;;
         
         # Modelos CROM VFS (Pack + Mount + Llama)
         7) 
@@ -400,7 +400,7 @@ while true; do
             run_model_chat "Mistral Small 24B" \
                 "bartowski/Mistral-Small-24B-Instruct-2501-GGUF" \
                 "Mistral-Small-24B-Instruct-2501-Q4_K_M.gguf" \
-                "true" 1024 12000
+                "true" 1024 13000
             ;;
         8)
             echo -e "\n${RED}⚠️  PIPELINE CROM VFS${RESET}"
