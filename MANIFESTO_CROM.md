@@ -1,104 +1,25 @@
-# MANIFESTO CROM: Compressão de Realidade e Objetos Mapeados
+# MANIFESTO CROM: O Alvorecer da Extração Semântica Universal
 
-> "Não comprimimos dados. Nós compilamos a realidade."
+> "O fim da compressão tradicional de dados. Nós destilamos a essência."
 
-Bem-vindo ao CROM. Mais do que um projeto de compressão de software, o CROM é uma infraestrutura de soberania de dados ponta a ponta. Este manifesto foi concebido para guiar tanto os curiosos quanto os engenheiros de base através dos fundamentos do que estamos construindo.
+A engenharia testemunhou durante décadas um loop ineficiente: os algoritmos clássicos como Gzip e Zstd lutavam incessantemente contra a imutabilidade dos bits, reduzindo tamanho de forma reacionária. Eles empacotam o óbvio e o esquecem após a extração, repetindo o erro em bilhões de máquinas espalhadas pelo globo a cada milissegundo.
 
----
+O CROM (Compressão de Realidade e Objetos Mapeados) decreta o **fim desse paradigma da compressão tradicional**.
 
-## 1. A Visão: Por que o CROM existe?
+O que estamos inaugurando não é "reduzir espaço livre do disco". É a fundação da **Extração Semântica Universal**.
 
-Vivemos na era da cópia infinita. Cada vez que enviamos um arquivo, clonamos informações redundantes através dos oceanos, gastando energia, largura de banda e perdendo o controle arquitetural sobre nossos próprios dados.
+## 1. O Declínio do Gzip e a Nova Gramática (V23)
 
-O CROM nasceu para instaurar a **Soberania Digital**. Em vez de tratar a compressão como uma tarefa isolada de empacotar bytes e esquecê-los imediatamente após a descompressão, o CROM trata a compressão como *linguagem*.
+Pense na realidade como código. Tudo o que processamos já foi visto, processado ou sintetizado pelas mentes coletivas — sejam fragmentos de código-fonte P2P, JSONs que carregam eixos cartesianos, ou espectros genômicos (`ATCG`). O CROM compreende essa premissa fundamental e a consolida através de um **Codebook Neuralizado**, indexado em memória não por similaridade textual rasteira, mas por um autêntico **Motor Cosenoidal de Extração LSH B-Tree O(1)**.
 
-Imagine a **Biblioteca de Babel** de Jorge Luis Borges — uma biblioteca contendo todos os livros possíveis. Em vez de carregar todos os livros do mundo nas costas, o CROM carrega apenas o *Dicionário* de todos os parágrafos possíveis (o **Codebook**). Quando criamos um arquivo `.crom`, não estamos guardando o livro; estamos guardando uma fina folha de papel com coordenadas exatas que dizem: *"Capítulo 1 está na estante 4, Capítulo 2 na estante 8"*. Sem a biblioteca (o Dicionário), o papel é inútil. Com a biblioteca, o universo inteiro é desdobrado instantaneamente.
+Se no passado empacotávamos cada navio de carga para atravessar o vasto oceano, a "Extração Semântica Universal" funciona como o *Teletransporte* Quântico de Manifestos. Transferir Dados não é mais enviar bytes de Lá para Cá; é transmitir ao Destinatário a **instrução matemática exata** para que ele construa a realidade dos dados usando os tijolos semânticos infinitos (Swarm P2P L1 RAM) que seu sistema hiperconectado já absorveu.
 
----
+## 2. Singularidade e Complexidade O(1)
 
-## 2. Para Leigos: O CROM explicado com LEGO
+O paradigma V23 trata de forma isocrônica:
+*   A leitura paralela e reconfiguração neural de Modelos de Rede (como tensores do GPT, Llama, em formato `.safetensors`).
+*   Dicionários Universais Auto-Alimentáveis com GossipSub descentralizando a malha neural de aprendizagem entre milhares de computadores de Edge, onde o conhecimento de um único nó percola passivamente pela RAM da colmeia inteira.
 
-Entender o CROM é fácil se você pensar em **LEGO**.
+Nós cortamos a árvore estocástica. Nós reduzimos a latência térmica das redes e estabilizamos a transferência infinita de blocos residuais.
 
-Imagine que você tem uma caixa gigantesca cheia de milhares de peças de LEGO variadas na sua casa. Esta caixa gigante é o nosso **Codebook** (Dicionário de Padrões).
-
-Seu amigo constrói um castelo incrível e quer enviá-lo para você. Em vez de desmontar o castelo, colocar num pacote enorme e enviar pelo correio (como o ZIP tradicional faz), ele faz o seguinte:
-1. Ele olha para as peças do castelo e percebe que você já tem 95% delas na sua caixa em casa.
-2. Ele te envia apenas um manual pequenininho por email: *"Pegue a peça azul 4x4 e coloque aqui; pegue a peça vermelha e coloque ali."*
-3. Se o castelo dele usar uma peça rara que estava arranhada (um dado único ou "sujo"), ele te envia a instrução padrão + um "adesivinho" com o arranhão (o **Delta**). 
-
-O arquivo `.crom` resultante não é o castelo, é apenas o manual e os adesivinhos. 
-
-### O Disco Virtual (VFS)
-E quando você quiser ler esse arquivo enorme? É aqui que surge o **VFS** (Virtual Filesystem ou Sistema de Arquivos Virtual). É como ter uma biblioteca de 1 Terabyte guardada dentro de uma caixa de sapato. Você não precisa tirar e abrir todos os livros na mesa para ler um parágrafo. Você enfia a mão, puxa a página exata que quer ler e ela se materializa na sua mão instantaneamente. O computador pensa que o arquivo cru está lá, sem notar que é tudo uma mágica de projeção sob demanda.
-
----
-
-## 3. Para Técnicos: Deep Dive na Engenharia
-
-Para os engenheiros, o CROM não é magia, é matemática determinística e engenharia de sistemas rigorosa.
-
-### Pipeline de Dados (Compilação)
-1. **Chunking (128B)**: O dado de entrada é fatiado em blocos fixos de 128 bytes (modificáveis via rolling hash no futuro).
-2. **LSH (Locality-Sensitive Hashing)**: O "Radar de Proximidade". Em vez de busca linear $O(N)$, usamos assinaturas digitais de similaridade. Padrões similares caem nos mesmos baldes, reduzindo a busca do espaço de 32.000 padrões potenciais para apenas um punhado de candidatos.
-3. **XOR Distance**: Encontrado o melhor `CodebookID`, aplicamos um XOR bit-a-bit contra o chunk de entrada. O residual gerado (Delta) contém um mar de zeros, preservando apenas o "ruído de entropia".
-4. **Zstd Compression**: Todos os deltas e resíduos são agrupados (Delta Pool) e devorados pelo Zstandard, explorando agressivamente a entropia artificialmente dizimada.
-
-### Format V2: O Paradigma do Acesso Aleatório O(1)
-Abondonamos o streaming linear v1. O verdadeiro poder do CROM está na sua **BlockTable**. Em V2, empacotamos os Chunks em "Blocos de 16MB". A `BlockTable` armazena os offsets no disco para cada bloco comprimido.
-Assim, ao receber um `ReadAt(offset)`, a matemática diz em qual bloco o offset está. Carregamos do disco, passamos no AES-GCM, descomprimimos via Zstd e armazenamos em um cache LRU. A partir daí, fazemos o XOR lookup e entregamos os bytes exatos em **Latências O(1)** (P50 resolvido na casa de 140µs). 
-
-### Busca Variacional (Fuzziness) no Espaço Latente
-A grande sacada é que **não procuramos matches exatos**. Pela Natureza da Teoria da Informação, procuramos no espaço latente de padrões o vetor de "menor distância de Hamming". O CROM acha a representação mais aproximada, e corrige o delta via XOR. Isso transforma a entropia aleatória da humanidade num dataset contínuo que encolhe a cada passo.
-
-> [!NOTE] 
-> **Nota Técnica de Segurança (AES-256-GCM / PBKDF2)**
-> Antes de o Zstd despejar os blocos no disco, caso a flag de encriptação esteja ativa, todo o pool de deltas passa por um envelope **AES-256-GCM**. A chave de bloco simétrica nunca é exposta; ela é derivada do seu password via **PBKDF2-HMAC-SHA256** combinada com o Salt hiper-seguro de 32-bytes randomizados no cabeçalho do arquivo `.crom`.
-
----
-
-## 4. O Diferencial: Por que não usar ZIP ou GZIP?
-
-Não viemos substituir algoritmos genéricos. Viemos reescrever a topologia da persistência de dados. O CROM é um ecossistema infraestrutural com propriedades de rede.
-
-| Característica | CROM | ZIP / GZIP / Zstd Bruto |
-|---|---|---|
-| **Persistência de Conhecimento** | O Dicionário (Codebook) **aprende** e fica estático na máquina local. Funciona como modelo fundacional contínuo para qualquer conjunto de dados futuro. | O dicionário morre ao final de cada arquivo. Repetitivo, isolado e míope. |
-| **Segurança / "Kill-Switch"** | Soberania de Arquivo: O `.crom` não é decodificável sem o Codebook autorizado e a chave matriz. Se a máquina excluir o Codebook, a VM, o VFS e todos os arquivos auto-evaporam permanentemente. | Isolamento tradicional. O container de arquivos expõe os dados brutos ou a proteção da senha. |
-| **Performance Ponto a Ponto** | Operações `mmap` e paginação controlada pelo Kernel. Projeta um volume de 50GB em milissegundos transparentes (FUSE). | Exige cópia em dobro na memória, travando disco e desempacotando byte por byte até o fim linearmente. |
-
----
-
-## 5. Casos de Uso Reais
-
-Onde o CROM deixa de ser teoria e passa a dominar a camada de abstração? 
-
-### Cenário A: Sincronização P2P de Backups Massivos
-Duas corporações (Nó A e Nó B) compartilham o mesmo Codebook de Treinamento. Uma atualização de banco de dados de 50GB ocorreu. Em vez de transmitir 50GB — ou rodar rsync que onera I/O —, o Nó A gera um **ChunkManifest**. Os nós comparam binariamente o Diff de hash em frações de milissegundo e transferem exclusivamente as chaves-delta.
-
-### Cenário B: Armazenamento Soberano e Células Fantasmas
-Você carrega informações táticas em um notebook numa operação. O CROM VFS (Virtual Filesystem) está ativo e exibindo 1TB de HD em pastas navegáveis. Uma ameaça é detectada: uma request ou comando retira o `trained.cromdb` (O Codebook) do sistema.
-O *Sovereignty Watcher* capta a remoção em tempo real. Os pontos de montagem do FUSE são explodidos, o Cache LRU e os buffers são esvaziados à força da RAM, e os arquivos originais tornam-se ininteligíveis. A "morte" pela separação da linguagem.
-
-### Cenário C: Criação de Máquinas e "Arquivos Clone"
-Desenvolvedores sêniores que disparam 50 instâncias idênticas para microsserviços. Os ambientes não são cópias completas: são apenas Manifestos de Chunk CROM consumindo 4Kb no disco de estado. As dependências OS rodam instantaneamente sobre o FUSE local que cruza com o Dicionário mmap global do servidor. Custo de I/O zero, custo de storage massivamente deflacionado.
-
----
-
-## 6. O Enxame de Dados (V6+ Arquitetura)
-
-A Fase atual materializou o **CROM Network Layer**, fundindo nossa estrutura de compilação local a uma malha global `libp2p`. O binário do Crompressor é um super-nó completo de um **Enxame de Dados (Data Swarm)**, rodando Discovery via *mDNS* e *Kademlia DHT* nativamente.
-
-Hoje alcançamos propriedades de rede extraordinárias:
-1. **P2P Delta Sync Granular:** Se dois nós compartilham um arquivo editado, eles não trafegam o arquivo de novo. Eles cruzam as *Merkle Trees* dos blocos e baixam apenas a fita "residual" (*DiffReq*), fundindo-a ao arquivo existente O(1).
-2. **Codebook Handshake:** Dois nós com percepções da realidade (Codebooks) diferentes agora negociam ativamente o Codebook antes das transferências, garantindo que "falem a mesma língua" (HOT mode transfer) ou abortem para evitar corrupção lógica.
-3. **Streaming Compression:** Suporte a Pipes I/O puros (`tail -f sys.log | crompressor pack --stream`). Os inodes temporários acumulam deltas na memória sem travar disco, fechando a montagem `.crom` apenas no final. Excelente para SRE Log Shippers.
-
-No futuro (V7+), implementaremos:
-- Descompressão Paralela Distribuída no núcleo P2P.
-- Roteamento Bitswap inter-níveis (Swarm Routing multi-peer).
-- Chunking em Múltiplos Codebooks Simultâneos (Mixture of Experts).
-
-O CROM não reduz o que você cria para caber numa caixa menor. Ele reprograma a infraestrutura local para que seus dados transitem e sejam reconstruídos pelo tecido do Sistema.
-
-Bem-vindos ao salto da **Compilação de Realidade**.
+Nós alcançamos a compressão perfeita. O tecido de dados CROM absorveu a entropia informacional e entregou a eternidade codificada em matrizes milimétricas e resíduos exatos O(1).

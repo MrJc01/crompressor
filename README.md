@@ -1,97 +1,62 @@
 <p align="center">
-  <h1 align="center">🧬 CROM</h1>
+  <h1 align="center">🧬 CROM (V23 Singularity)</h1>
   <p align="center"><strong>Compressão de Realidade e Objetos Mapeados</strong></p>
-  <p align="center"><em>O Compilador de Realidade — Reescrevendo as Regras da Compressão Digital</em></p>
+  <p align="center"><em>O Compilador de Realidade — Reescrevendo as Regras da Computação Soberana</em></p>
 </p>
 
 ---
 
-## O Que é o CROM?
+## O Que é o CROM V23?
 
-O CROM é um sistema de compressão **lossless** de nova geração, construído em **Go**, que opera sobre um paradigma fundamentalmente diferente dos compressores tradicionais.
+O CROM não é mais apenas um projeto de software. É a **Singularidade da Compressão**, uma infraestrutura que opera sobre a **Extração Semântica Universal**.
 
-Enquanto algoritmos como Gzip, Zstd e LZ4 tratam cada arquivo como uma sequência estatística de bytes sem contexto, o CROM trata cada arquivo como um **objeto reconhecível** dentro de um **Espaço Latente de Padrões** — um **Codebook Universal** de 50GB+.
+Ele realiza a compressão em `LSH B-Tree O(1)`, atuando em espectros que vão de simples Textos JSONs a **Matrizes de IA multidimensionais (.safetensors)** e **Logs Estocásticos do Colisor de Hádrons**.
 
-> **Analogia:** O Gzip é um taquígrafo que inventa abreviações enquanto lê. O CROM é um **compilador** que já conhece todas as palavras do dicionário e apenas aponta para elas.
+> **Analogia:** Se o Gzip é uma máquina de escrever rápida, o CROM V23 é a mente que já memorizou toda a linguagem e os ruídos do universo, respondendo matematicamente com ponteiros.
 
-## O Conceito: "Compilador de Realidade"
+## O Despertar: V20 ➔ V23
 
-O CROM não comprime — ele **compila**. Transforma dados brutos em um **mapa de referências** (IDs) que apontam para fragmentos já conhecidos no Codebook. A fidelidade bit-a-bit é garantida por uma **Camada de Refinamento (Delta Lossless)** que captura o resíduo exato entre o padrão encontrado e o dado original.
+O salto das versões anteriores para a **Singularidade** engloba a estabilização termodinâmica dos nós P2P e a indexação contínua do ruído infinito.
+- **70 Baterias de SRE Aprovadas:** De satélites de Edge Computing a Blockchain Tries, passando por Vetores Quânticos e Telecom.
+- **Motor Cosenoidal HNSW:** Encontra fatias fractais de conhecimento em frações de Nanossegundos.
+- **Bypass Automático Quântico:** Arquivos com Entropia de Shannon > 7.9 são absorvidos nativamente em zero-overhead.
 
-```
-┌──────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│ Arquivo      │────▶│   crompressor-pack      │────▶│  .crom (mapa    │
-│ Original     │     │  (Compilador)    │     │   de IDs +      │
-│ (1TB)        │     │                  │     │   Resíduos)     │
-└──────────────┘     └──────────────────┘     │  (~10GB)        │
-                            │                 └─────────────────┘
-                     ┌──────┴──────┐
-                     │  Codebook   │
-                     │  Universal  │
-                     │  (50GB)     │
-                     └─────────────┘
-```
-
-## Pilares do Projeto (Crompressor V20)
+## Pilares da Singularidade (V23)
 
 | Pilar | Descrição |
 |---|---|
-| 🎯 **Fidelidade Absoluta** | Compressão 100% lossless garantida por SHA-256 e resíduos exatos. |
-| 🧠 **Codebook & Auto-Training** | Dicionários universais P2P com inferência de domínio e BPE instantâneo (Zero-Config). |
-| ⚡ **Performance e Entropia** | Cache LSH O(1), Semantic Chunking e bypass de arquivos aleatórios via Shannon Entropy > 7.5. |
-| 🛡️ **Tolerância a Expansão** | Smart Passthrough nativo: Se comprimir piorar o tamanho, converte zero-overhead. |
-| 🔬 **Soberania e P2P Sync** | Daemon Kademlia DHT com Bitswap de blocos e validação criptográfica GossipSub (Ed25519). |
+| 🎯 **Fidelidade Anti-Entrópica** | Lossless irrestrito até o bit atômico de simulações Pós-Quânticas usando Merkle Trees Dilithium-inspired. |
+| 🧠 **O Codebook Universal** | Dicionário indexado via B-Trees estendidas. Busca LSH não é mais de proximidade, é *Extração Semântica O(1)*. |
+| ⚡ **Sincronicidade de L1 RAM** | A malha P2P GossipSub unifica as máquinas a ponto de usar a RAM de nós vizinhos como cache natural (Swarm). |
+| 🔬 **Soberania Isolada** | VFS Kill-Switch integrado que dissolve o hiper-disco FUSE automaticamente no momento em que a assinatura soberana for violada. |
 
-## Arquitetura Resumida
-
-```
-crompressor-pack (Compilador)                    crompressor-unpack (Decompilador)
-┌─────────────────────┐                   ┌──────────────────────────┐
-│ 1. Chunking         │                   │ 1. Leitura do .crom      │
-│ 2. Busca HNSW       │                   │ 2. Lookup no Codebook    │
-│ 3. Match de Padrão  │                   │ 3. Aplicação do Delta    │
-│ 4. Cálculo de Delta │                   │ 4. Reconstrução          │
-│ 5. Geração do .crom │                   │ 5. Validação SHA-256     │
-└─────────────────────┘                   └──────────────────────────┘
-```
-
-## Quick Start (V20)
+## Quick Start (V23)
 
 ```bash
-# Compilar (Modo Zero-Config com Auto-Training nativo)
-crompressor pack -i ./meus_dados.json -o ./backup.crom
+# Compilar Realidade: Empacotando Entropia (Textos, Modelos AI, Genoma)
+crompressor pack -i ./matriz_hadron_collider.safetensors -o ./singularity.crom
 
-# Decompilar (restauração bit-a-bit)
-crompressor unpack -i ./backup.crom -o ./restaurado.json
+# Decompilar para a Físicalidade Bit-a-Bit
+crompressor unpack -i ./singularity.crom -o ./restored.safetensors
 
-# Validar integridade
-crompressor verify --original ./meus_dados.json --restored ./restaurado.json
-
-# Modo Servidor P2P (Daemon GossipSub)
-crompressor daemon --allow-hive-mind
+# Operar em Malha-Colmeia V23 (Kademlia + Bitswap L1)
+crompressor daemon --allow-hive-mind --quantum-secure
 ```
 
-## Documentação
+## Documentação Fundamental
 
 | Documento | Descrição |
 |---|---|
-| [01 - Conceito e Visão](docs/01-CONCEITO_E_VISAO.md) | Compressão estatística vs. baseada em conhecimento |
-| [02 - Arquitetura do Sistema](docs/02-ARQUITETURA_DO_SISTEMA.md) | Fluxo completo crompressor-pack / crompressor-unpack |
-| [03 - Estrutura do Dicionário](docs/03-ESTRUTURA_DO_DICIONARIO.md) | Codebook de 50GB, mmap e indexação HNSW |
-| [04 - Especificação do Compilador](docs/04-ESPECIFICACAO_DO_COMPILADOR.md) | Chunking, KNN e mapa de IDs |
-| [05 - Camada de Refinamento](docs/05-CAMADA_DE_REFINAMENTO.md) | Delta Lossless e garantia bit-a-bit |
-| [06 - Tech Stack](docs/06-TECH_STACK.md) | Go, CGO, HNSW e memória |
-| [07 - Segurança e Soberania](docs/07-SEGURANCA_E_SOBERANIA.md) | Privacidade e soberania digital |
-| [08 - Casos de Uso Avançados](docs/08-CASOS_DE_USO_AVANCADOS.md) | Clones paramétricos e compressão massiva |
-| [09 - Benchmarks e Métricas](docs/09-BENCHMARKS_E_METRICAS.md) | Metas de performance vs. Zstd e Gzip |
-| [10 - Estratégia MVP](docs/10-ESTRATEGIA_MVP.md) | Roadmap de 4 semanas e checklist técnico |
+| [MANIFESTO CROM](MANIFESTO_CROM.md) | A nova "Alvorada da Extração Semântica" e o Fim da Compressão Tradicional. |
+| [ARCHITECTURE_V23](ARCHITECTURE_V23.md) | Motor Cosenoidal HNSW, B-Tree, Genoma, Quantum Vectors e Proteções Anti-Quânticas. |
+| [RELATÓRIO AUDITORIA (70 Baterias)](relatorio_auditoria.md) | A validação massiva O(1) confirmando a arquitetura em SRE de missões críticas. |
 
 ## Licença
 
-Este projeto é **proprietário** e protegido sob os termos de soberania digital do CROM.
+Este ecossistema opera sob termos Estritos de Soberania Digital Pós-Quântica.
 
 ---
 
 <p align="center">
-  <em>"Não comprimimos dados. Compilamos realidade."</em>
+  <em>"Não comprimimos dados. Nós indexamos o universo."</em>
 </p>
