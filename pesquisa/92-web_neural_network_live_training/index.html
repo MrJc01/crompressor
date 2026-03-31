@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>CROM Test 92 — Neural Network Live Training</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d0d1a;color:#e0e0ff;font-family:'Courier New',monospace;display:flex;height:100vh;overflow:hidden}
+#sidebar{width:340px;min-width:340px;background:rgba(10,10,30,0.95);border-right:1px solid #3030aa;padding:20px;overflow-y:auto;z-index:10}
+h1{font-size:16px;color:#80f0ff;margin-bottom:10px}
+.info{font-size:11px;color:#8888cc;line-height:1.7;margin-bottom:14px}
+#main{flex:1;position:relative}
+canvas#c{display:block;width:100%;height:100%}
+.btn{display:inline-block;padding:7px 14px;background:#1a1a50;border:1px solid #5050ff;border-radius:6px;color:#aaf;cursor:pointer;font-size:11px;margin:3px;transition:all .2s;font-family:inherit}
+.btn:hover{background:#3030aa;transform:translateY(-1px)}
+.btn.active{background:#4040cc;border-color:#80f0ff;color:#fff}
+#stats{margin-top:14px;font-size:12px;color:#80f0ff;line-height:2;background:rgba(40,40,100,0.2);padding:10px;border-radius:8px;border:1px solid rgba(80,80,200,0.2)}
+#chart{width:100%;height:120px;background:#08081a;border:1px solid #2020aa;border-radius:8px;margin-top:14px}
+.param{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:11px;color:#aaa}
+.param label{min-width:80px}
+.param input[type=range]{flex:1;accent-color:#5050ff;height:4px}
+.param span{min-width:44px;text-align:right;color:#80f0ff;font-weight:bold}
+.section{margin-top:14px;padding-top:10px;border-top:1px solid rgba(80,80,200,0.2)}
+.section-title{font-size:10px;color:#6666aa;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px}
+</style>
+</head>
+<body>
+<div id="sidebar">
+<h1>🧠 Neural Network Live Training</h1>
+<p class="info">Rede neural com backpropagation treinando em tempo real.<br>Clique no canvas: botão esquerdo = classe 0 (azul), Shift+click = classe 1 (rosa)</p>
+
+<div class="section"><div class="section-title">Arquitetura</div>
+<div>
+<span class="btn active" onclick="setArch(this,[4,4])">2→4→4→1</span>
+<span class="btn" onclick="setArch(this,[8,8])">2→8→8→1</span>
+<span class="btn" onclick="setArch(this,[16,8,4])">2→16→8→4→1</span>
+<span class="btn" onclick="setArch(this,[32,16,8])">2→32→16→8→1</span>
+</div></div>
+
+<div class="section"><div class="section-title">Parâmetros</div>
+<div class="param"><label>Learning Rate</label><input type="range" id="lr" min="1" max="200" value="50"><span id="lrv">0.050</span></div>
+<div class="param"><label>Noise</label><input type="range" id="noise" min="0" max="50" value="15"><span id="noisev">0.15</span></div>
+</div>
+
+<div class="section"><div class="section-title">Dataset</div>
+<div>
+<span class="btn" onclick="genSpiral()">🌀 Spiral</span>
+<span class="btn" onclick="genCircle()">⭕ Circle</span>
+<span class="btn" onclick="genXOR()">✖ XOR</span>
+<span class="btn" onclick="genMoons()">🌙 Moons</span>
+<span class="btn" onclick="genClusters()">🔴 Clusters</span>
+</div></div>
+
+<div id="stats">Epoch: 0<br>Loss: —<br>Accuracy: —</div>
+<canvas id="chart"></canvas>
+</div>
+<div id="main"><canvas id="c"></canvas></div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const chart=document.getElementById('chart'),cctx=chart.getContext('2d');
+let W,H;
+function resize(){
+  W=canvas.width=canvas.parentElement.offsetWidth;
+  H=canvas.height=canvas.parentElement.offsetHeight;
+  chart.width=chart.offsetWidth;chart.height=chart.offsetHeight;
+}
+resize();window.addEventListener('resize',resize);
+
+let data=[],arch=[4,4],epoch=0,lossHistory=[],accHistory=[];
+const lr_el=document.getElementById('lr'),noise_el=document.getElementById('noise');
+lr_el.oninput=()=>document.getElementById('lrv').textContent=(lr_el.value/1000).toFixed(3);
+noise_el.oninput=()=>document.getElementById('noisev').textContent=(noise_el.value/100).toFixed(2);
+
+function setArch(el,a){
+  document.querySelectorAll('.btn.active').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');arch=a;initNetwork();epoch=0;lossHistory=[];accHistory=[];
+}
+
+let weights=[],biases=[];
+function initNetwork(){
+  weights=[];biases=[];
+  let layers=[2,...arch,1];
+  for(let i=0;i<layers.length-1;i++){
+    let w=[];let fan_in=layers[i],fan_out=layers[i+1];
+    let std=Math.sqrt(2.0/fan_in); // He initialization
+    for(let j=0;j<fan_out;j++){let row=[];for(let k=0;k<fan_in;k++)row.push((Math.random()*2-1)*std);w.push(row)}
+    weights.push(w);biases.push(new Array(fan_out).fill(0));
+  }
+}
+
+function relu(x){return Math.max(0,x)}
+function sigmoid(x){return 1/(1+Math.exp(-Math.max(-12,Math.min(12,x))))}
+
+function forward(input){
+  let act=[input];
+  for(let l=0;l<weights.length;l++){
+    let prev=act[act.length-1],next=[];
+    for(let j=0;j<weights[l].length;j++){
+      let sum=biases[l][j];
+      for(let k=0;k<prev.length;k++)sum+=weights[l][j][k]*prev[k];
+      next.push(l<weights.length-1?relu(sum):sigmoid(sum));
+    }
+    act.push(next);
+  }
+  return act;
+}
+
+function train(){
+  if(data.length<2)return;
+  const rate=lr_el.value/1000;
+  let totalLoss=0;
+  for(let d of data){
+    let acts=forward([d.x,d.y]);
+    let pred=acts[acts.length-1][0],target=d.label;
+    let loss=-(target*Math.log(pred+1e-7)+(1-target)*Math.log(1-pred+1e-7));
+    totalLoss+=loss;
+    let dOutput=pred-target;
+    let deltas=[new Array(1).fill(dOutput)];
+    for(let l=weights.length-2;l>=0;l--){
+      let d2=[];
+      for(let j=0;j<weights[l].length;j++){
+        let err=0;
+        for(let k=0;k<weights[l+1].length;k++)err+=deltas[0][k]*weights[l+1][k][j];
+        d2.push(acts[l+1][j]>0?err:0);
+      }
+      deltas.unshift(d2);
+    }
+    for(let l=0;l<weights.length;l++){
+      for(let j=0;j<weights[l].length;j++){
+        for(let k=0;k<acts[l].length;k++)weights[l][j][k]-=rate*deltas[l][j]*acts[l][k];
+        biases[l][j]-=rate*deltas[l][j];
+      }
+    }
+  }
+  epoch++;
+  let avgLoss=totalLoss/data.length;
+  lossHistory.push(avgLoss);if(lossHistory.length>300)lossHistory.shift();
+  let correct=data.filter(d=>{let p=forward([d.x,d.y]);return(p[p.length-1][0]>0.5?1:0)===d.label}).length;
+  let acc=correct/data.length*100;
+  accHistory.push(acc);if(accHistory.length>300)accHistory.shift();
+  document.getElementById('stats').innerHTML=`Epoch: <b>${epoch}</b><br>Loss: <b>${avgLoss.toFixed(4)}</b><br>Accuracy: <b>${acc.toFixed(1)}%</b><br>Datapoints: <b>${data.length}</b>`;
+}
+
+function drawDecisionBoundary(){
+  const res=3;
+  const imgData=ctx.createImageData(W,H);
+  for(let px=0;px<W;px+=res){
+    for(let py=0;py<H;py+=res){
+      let x=(px/W)*2-1,y=(py/H)*2-1;
+      let acts=forward([x,y]);let v=acts[acts.length-1][0];
+      // Class 0 = blue, Class 1 = pink/red
+      let r,g,b;
+      if(v<0.5){
+        let t=v/0.5; // 0 to 1 within class 0
+        r=Math.floor(15+t*30);
+        g=Math.floor(25+t*50);
+        b=Math.floor(80+t*60);
+      } else {
+        let t=(v-0.5)/0.5; // 0 to 1 within class 1
+        r=Math.floor(50+t*120);
+        g=Math.floor(20+t*15);
+        b=Math.floor(40+t*30);
+      }
+      for(let dx=0;dx<res&&px+dx<W;dx++){
+        for(let dy=0;dy<res&&py+dy<H;dy++){
+          let i=((py+dy)*W+(px+dx))*4;
+          imgData.data[i]=r;imgData.data[i+1]=g;imgData.data[i+2]=b;imgData.data[i+3]=255;
+        }
+      }
+    }
+  }
+  ctx.putImageData(imgData,0,0);
+
+  // Draw decision boundary contour (v=0.5 line)
+  ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=1;
+  for(let px=0;px<W;px+=res){
+    for(let py=0;py<H;py+=res){
+      let x=(px/W)*2-1,y=(py/H)*2-1;
+      let v=forward([x,y])[arch.length+1][0];
+      let vr=forward([(px+res)/W*2-1,y])[arch.length+1][0];
+      let vd=forward([x,(py+res)/H*2-1])[arch.length+1][0];
+      if((v-0.5)*(vr-0.5)<0||(v-0.5)*(vd-0.5)<0){
+        ctx.fillStyle='rgba(255,255,255,0.35)';
+        ctx.fillRect(px,py,res,res);
+      }
+    }
+  }
+}
+
+function drawPoints(){
+  data.forEach(d=>{
+    let sx=(d.x+1)/2*W,sy=(d.y+1)/2*H;
+    ctx.beginPath();ctx.arc(sx,sy,6,0,Math.PI*2);
+    ctx.fillStyle=d.label===1?'#ff5088':'#50aaff';ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.8)';ctx.lineWidth=1.5;ctx.stroke();
+  });
+}
+
+function drawLossChart(){
+  let cw=chart.width,ch=chart.height;
+  cctx.fillStyle='#08081a';cctx.fillRect(0,0,cw,ch);
+  if(lossHistory.length<2)return;
+
+  // Loss line
+  let maxL=Math.max(...lossHistory,0.1);
+  cctx.strokeStyle='#ff5050';cctx.lineWidth=1.5;cctx.beginPath();
+  lossHistory.forEach((l,i)=>{
+    let x=i/(lossHistory.length-1)*cw;
+    let y=ch-(l/maxL)*ch*0.85-ch*0.05;
+    i===0?cctx.moveTo(x,y):cctx.lineTo(x,y);
+  });cctx.stroke();
+
+  // Accuracy line
+  cctx.strokeStyle='#50ff80';cctx.lineWidth=1.5;cctx.beginPath();
+  accHistory.forEach((a,i)=>{
+    let x=i/(accHistory.length-1)*cw;
+    let y=ch-(a/100)*ch*0.85-ch*0.05;
+    i===0?cctx.moveTo(x,y):cctx.lineTo(x,y);
+  });cctx.stroke();
+
+  cctx.font='9px monospace';
+  cctx.fillStyle='#ff5050';cctx.fillText(`Loss: ${lossHistory[lossHistory.length-1].toFixed(3)}`,4,10);
+  cctx.fillStyle='#50ff80';cctx.fillText(`Acc: ${accHistory[accHistory.length-1].toFixed(1)}%`,cw-80,10);
+}
+
+function genSpiral(){data=[];const n=200,ns=noise_el.value/100;for(let i=0;i<n;i++){let t=i/n*3.5*Math.PI,r=i/n*0.8;data.push({x:r*Math.cos(t)+(Math.random()-0.5)*ns,y:r*Math.sin(t)+(Math.random()-0.5)*ns,label:0});data.push({x:-r*Math.cos(t)+(Math.random()-0.5)*ns,y:-r*Math.sin(t)+(Math.random()-0.5)*ns,label:1});}epoch=0;lossHistory=[];accHistory=[];initNetwork();}
+function genCircle(){data=[];const n=200,ns=noise_el.value/100;for(let i=0;i<n;i++){let a=Math.random()*Math.PI*2;let r1=0.15+Math.random()*0.15;data.push({x:Math.cos(a)*r1+(Math.random()-0.5)*ns*0.5,y:Math.sin(a)*r1+(Math.random()-0.5)*ns*0.5,label:0});let r2=0.55+Math.random()*0.25;data.push({x:Math.cos(a)*r2+(Math.random()-0.5)*ns*0.5,y:Math.sin(a)*r2+(Math.random()-0.5)*ns*0.5,label:1});}epoch=0;lossHistory=[];accHistory=[];initNetwork();}
+function genXOR(){data=[];const n=80,ns=noise_el.value/100;for(let i=0;i<n;i++){data.push({x:-0.5+(Math.random()-0.5)*ns,y:-0.5+(Math.random()-0.5)*ns,label:0});data.push({x:0.5+(Math.random()-0.5)*ns,y:0.5+(Math.random()-0.5)*ns,label:0});data.push({x:-0.5+(Math.random()-0.5)*ns,y:0.5+(Math.random()-0.5)*ns,label:1});data.push({x:0.5+(Math.random()-0.5)*ns,y:-0.5+(Math.random()-0.5)*ns,label:1});}epoch=0;lossHistory=[];accHistory=[];initNetwork();}
+function genMoons(){data=[];const n=200,ns=noise_el.value/100;for(let i=0;i<n;i++){let a=Math.PI*i/n;data.push({x:Math.cos(a)*0.5+(Math.random()-0.5)*ns,y:Math.sin(a)*0.5-0.15+(Math.random()-0.5)*ns,label:0});data.push({x:0.5-Math.cos(a)*0.5+(Math.random()-0.5)*ns,y:-Math.sin(a)*0.5+0.15+(Math.random()-0.5)*ns,label:1});}epoch=0;lossHistory=[];accHistory=[];initNetwork();}
+function genClusters(){data=[];const n=100,ns=noise_el.value/100;const centers=[[-.5,-.5],[.5,.5],[-.5,.5],[.5,-.5]];for(let i=0;i<n;i++){for(let j=0;j<4;j++){data.push({x:centers[j][0]+(Math.random()-0.5)*ns*2,y:centers[j][1]+(Math.random()-0.5)*ns*2,label:j<2?0:1});}}epoch=0;lossHistory=[];accHistory=[];initNetwork();}
+
+canvas.onclick=e=>{
+  let r=canvas.getBoundingClientRect();
+  let x=(e.clientX-r.left)/W*2-1,y=(e.clientY-r.top)/H*2-1;
+  data.push({x,y,label:e.shiftKey?1:0});
+};
+
+initNetwork();genSpiral();
+
+function loop(){
+  for(let i=0;i<8;i++)train();
+  drawDecisionBoundary();drawPoints();drawLossChart();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>

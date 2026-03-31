@@ -50,3 +50,7 @@ dummy*
 *.txt
 !testdata/*.txt
 !testdata/*.json
+
+# ═══ Pesquisa Web Audit Lab ═══
+!pesquisa/**/*.html
+

@@ -10,7 +10,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║      Mestre de Auditoria CROM (Testes 01-70)         ║"
+echo "║      Mestre de Auditoria CROM (Testes 01-90)         ║"
 echo "╚══════════════════════════════════════════════════════╝"
 
 echo "🔨 Construindo Crompressor na RAIZ..."
@@ -428,4 +428,137 @@ cd 70-dyson_sphere_energy_routing/scripts
 bash 01_test.sh
 cd ../../
 
-echo "✅ [ALL DONE] Auditoria Singularity de 01 a 70 concluída com triunfo insuperável."
+echo "✅ [PHASE 1] Baterias 01-70 concluídas!"
+echo ""
+echo "╔══════════════════════════════════════════════════════╗"
+echo "║   Singularity Extension (Testes 71-90)               ║"
+echo "╚══════════════════════════════════════════════════════╝"
+
+# Bateria 71: Antimatter Containment Field
+echo "▶️ Iniciando Bateria 71 (Antimatter Containment Field)..."
+cd 71-antimatter_containment_field/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 72: Multiverse Branch Deduplication
+echo "▶️ Iniciando Bateria 72 (Multiverse Branch Deduplication)..."
+cd 72-multiverse_branch_deduplication/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 73: Dark Energy Expansion Telemetry
+echo "▶️ Iniciando Bateria 73 (Dark Energy Expansion Telemetry)..."
+cd 73-dark_energy_expansion_telemetry/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 74: Neural Dream State Codec
+echo "▶️ Iniciando Bateria 74 (Neural Dream State Codec)..."
+cd 74-neural_dream_state_codec/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 75: Time Crystal Periodic Compression
+echo "▶️ Iniciando Bateria 75 (Time Crystal Periodic Compression)..."
+cd 75-time_crystal_periodic_compression/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 76: Gravitational Wave LIGO Delta
+echo "▶️ Iniciando Bateria 76 (Gravitational Wave LIGO Delta)..."
+cd 76-gravitational_wave_ligo_delta/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 77: Consciousness Upload Mind-File
+echo "▶️ Iniciando Bateria 77 (Consciousness Upload Mind-File)..."
+cd 77-consciousness_upload_mind_file/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 78: Warp Drive Alcubierre Navigation
+echo "▶️ Iniciando Bateria 78 (Warp Drive Alcubierre Navigation)..."
+cd 78-warp_drive_alcubierre_nav/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 79: Parallel Universe Entangled Sync
+echo "▶️ Iniciando Bateria 79 (Parallel Universe Entangled Sync)..."
+cd 79-parallel_universe_entangled_sync/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 80: Black Hole Hawking Radiation Log
+echo "▶️ Iniciando Bateria 80 (Black Hole Hawking Radiation Log)..."
+cd 80-black_hole_hawking_radiation_log/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 81: Teleportation Qubit Relay Mesh
+echo "▶️ Iniciando Bateria 81 (Teleportation Qubit Relay Mesh)..."
+cd 81-teleportation_qubit_relay_mesh/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 82: Galactic Civilization Type-III Grid
+echo "▶️ Iniciando Bateria 82 (Galactic Civilization Type-III Grid)..."
+cd 82-galactic_civilization_type3_grid/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 83: Planck Scale Spacetime Foam
+echo "▶️ Iniciando Bateria 83 (Planck Scale Spacetime Foam)..."
+cd 83-planck_scale_spacetime_foam/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 84: Matrioshka Brain Solar Compute
+echo "▶️ Iniciando Bateria 84 (Matrioshka Brain Solar Compute)..."
+cd 84-matrioshka_brain_solar_compute/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 85: Omega Point Heat Death Simulation
+echo "▶️ Iniciando Bateria 85 (Omega Point Heat Death Simulation)..."
+cd 85-omega_point_heat_death_sim/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 86: CRISPR Real-Time Gene Drive
+echo "▶️ Iniciando Bateria 86 (CRISPR Real-Time Gene Drive)..."
+cd 86-crispr_realtime_gene_drive/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 87: Von Neumann Self-Replicating Probe Swarm
+echo "▶️ Iniciando Bateria 87 (Von Neumann Self-Replicator)..."
+cd 87-von_neumann_self_replicator/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 88: Magnetar Pulsar Timing Array
+echo "▶️ Iniciando Bateria 88 (Magnetar Pulsar Timing Array)..."
+cd 88-magnetar_pulsar_timing_array/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 89: AGI Weight Matrix Compression
+echo "▶️ Iniciando Bateria 89 (AGI Weight Matrix Compression)..."
+cd 89-artificial_general_intelligence_weights/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 90: Superstring 11D Calabi-Yau
+echo "▶️ Iniciando Bateria 90 (Superstring 11D Calabi-Yau)..."
+cd 90-superstring_11d_calabi_yau/scripts
+bash 01_test.sh
+cd ../../
+
+echo ""
+echo "╔══════════════════════════════════════════════════════════════════╗"
+echo "║  ✅ [ALL DONE] Auditoria Singularity de 01 a 90 concluída!     ║"
+echo "║  🌐 Para testes WEB (91-100), execute:                         ║"
+echo "║     cd pesquisa && python3 -m http.server 8091                 ║"
+echo "║     Abra: http://localhost:8091/web_audit_lab.html             ║"
+echo "╚══════════════════════════════════════════════════════════════════╝"
+
