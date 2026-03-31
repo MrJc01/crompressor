@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# 🚀 Crompressor Research: High-Fidelity Audit Suite (v2.1 - Hotfix Verify)
+# 🚀 Crompressor Research: High-Fidelity Audit Suite (v21.0 - Exabyte Frontier)
 # ==============================================================================
 
 set -e
@@ -19,7 +19,7 @@ LOGS_JSON="$DATASETS/logs_200k.json"
 DUMP_V1="$DATASETS/dump_v1.sql"
 DUMP_V2="$DATASETS/dump_v2.sql"
 
-echo "🧪 [START] Auditoria Técnica Crompressor V2..."
+echo "🧪 [START] Auditoria Técnica Crompressor V21..."
 
 # ------------------------------------------------------------------------------
 # TESTE 01: LOGS DE ALTA REDUNDÂNCIA

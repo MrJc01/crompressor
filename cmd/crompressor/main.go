@@ -68,6 +68,7 @@ mapas de referências determinísticos com fidelidade bit-a-bit.
 	rootCmd.AddCommand(mountCmd())
 	rootCmd.AddCommand(infoCmd())
 	rootCmd.AddCommand(daemonCmd())
+	rootCmd.AddCommand(sharedDaemonCmd())
 	rootCmd.AddCommand(shareCmd())
 	rootCmd.AddCommand(cromfsCmd())
 	rootCmd.AddCommand(grepCmd())
@@ -218,6 +219,37 @@ de arquivos .crom na pasta data-dir.`,
 	cmd.Flags().StringVarP(&encKey, "encrypt", "e", "", "Chave AES para ler os pacotes. Requerida se os .crom estiverem encriptados.")
 	cmd.Flags().BoolVar(&allowHiveMind, "allow-hive-mind", false, "Habilita Quarentena e Aceitação de Brains via P2P (Opt-in Hive Mind)")
 
+	return cmd
+}
+
+func sharedDaemonCmd() *cobra.Command {
+	var socketPath string
+
+	cmd := &cobra.Command{
+		Use:   "shared-daemon",
+		Short: "Inicia o Unified Service Daemon (UDS/IPC) do Cérebro para Multi-Apps",
+		Long:  `Garante que apenas UMA cópia em RAM do Dicionário (Brain) sirva centenas de aplicativos Android/Servidor usando Sockets Locais ultrarrápidos (OOM Defense Limit O(1)).`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Println("╔═══════════════════════════════════════════╗")
+			fmt.Println("║     CROM UNIVERSAL DAEMON (IPC Core)      ║")
+			fmt.Printf("║  Socket: %-32s ║\n", socketPath)
+			fmt.Println("╚═══════════════════════════════════════════╝")
+
+			b := autobrain.NewSharedBrain(socketPath)
+			if err := b.Start(); err != nil {
+				return err
+			}
+
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+			<-sigCh
+
+			fmt.Println("\nTerminando Daemon Local IPC...")
+			b.Stop()
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&socketPath, "socket", "/tmp/crompressor.sock", "Caminho do Socket UNIX")
 	return cmd
 }
 

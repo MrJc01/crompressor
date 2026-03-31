@@ -5,8 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/MrJc01/crompressor/internal/crypto"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
+
+// ProposeChunkMsg represents a federated learning proposal for a universal chunk.
+type ProposeChunkMsg struct {
+	Type      string `json:"type"`       // "PROPOSE_CHUNK"
+	Hash      string `json:"hash"`       // Hash of the chunk
+	Payload   []byte `json:"payload"`    // Raw chunk data
+	Weight    uint32 `json:"weight"`     // Recurrency score
+	Signature []byte `json:"signature"`  // Ed25519 signature of the sender
+	Sender    string `json:"sender"`     // Peer ID
+}
 
 // AnnounceMsg represents a GossipSub message announcing a new or updated file.
 type AnnounceMsg struct {
@@ -79,6 +90,23 @@ func (gm *GossipManager) readLoop() {
 			continue
 		}
 
+		// Attempt to parse as ProposeChunkMsg first (Research 18)
+		var propose ProposeChunkMsg
+		if err := json.Unmarshal(msg.Data, &propose); err == nil && propose.Type == "PROPOSE_CHUNK" {
+			// [V21] Zero-Knowledge Sybil Defense: Validar Assinatura Dilithium Pós-Quântica (Research 25/27)
+			if propose.Weight > 0 {
+				isValid := crypto.VerifyDilithium([]byte(propose.Sender), propose.Signature, []byte(propose.Hash))
+				if !isValid {
+					fmt.Printf("\n🛑 [SRE-Swarm] Assinatura Pós-Quântica INVÁLIDA de %s. Roteamento Bloqueado!\n", propose.Sender)
+					continue
+				}
+
+				fmt.Printf("\n🧠 [Swarm] Padrão Quântico Seguro Verificado de %s! (Hash: %s, Peso: %d)\n", propose.Sender, propose.Hash, propose.Weight)
+				// A partir daqui, o Codebook instanciaria SimSearchGPU() e gravaria no Mmap local.
+			}
+			continue
+		}
+
 		var announce AnnounceMsg
 		if err := json.Unmarshal(msg.Data, &announce); err != nil {
 			fmt.Printf("[Gossip] Mensagem invalida recebida de %s\n", msg.ReceivedFrom)
@@ -117,6 +145,39 @@ func (n *CromNode) AnnounceFile(ctx context.Context, filename string, originalSi
 
 	if err := topic.Publish(ctx, data); err != nil {
 		return fmt.Errorf("gossip: publish failed: %w", err)
+	}
+
+	return nil
+}
+
+// ProposeUniversalPattern publishes a PROPOSE_CHUNK message to federate learning.
+func (n *CromNode) ProposeUniversalPattern(ctx context.Context, hash string, payload []byte, weight uint32, signature []byte) error {
+	if n.PubSub == nil {
+		return fmt.Errorf("swarm: pubsub not initialized for federated learning")
+	}
+
+	topicName := fmt.Sprintf("crom/announce/%x", n.CodebookHash[:16])
+	topic, err := n.PubSub.Join(topicName)
+	if err != nil {
+		return err
+	}
+
+	msg := ProposeChunkMsg{
+		Type:      "PROPOSE_CHUNK",
+		Hash:      hash,
+		Payload:   payload,
+		Weight:    weight,
+		Signature: signature,
+		Sender:    n.Host.ID().String(),
+	}
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
+	if err := topic.Publish(ctx, data); err != nil {
+		return fmt.Errorf("swarm: publish proposed chunk failed: %w", err)
 	}
 
 	return nil
