@@ -58,8 +58,8 @@ func DetectHeuristicBypass(entropy float64, buf []byte) bool {
 		if buf[0] == 0x7F && buf[1] == 0x45 && buf[2] == 0x4C && buf[3] == 0x46 {
 			return true
 		}
-		// GGUF Neural Weights
-		if string(buf[0:4]) == "GGUF" {
+		// Se for GGUF, nós ainda queremos bypass da Lz4/Zstd, MAS precisamos flagar a camada
+		if IsNeuralGGUF(buf) {
 			return true
 		}
 		// JPEG/JPG
@@ -105,5 +105,15 @@ func Shannon(data []byte) float64 {
 	}
 
 	return entropy
+}
+
+// IsNeuralGGUF detecta de forma contundente se os bytes percentem a um Payload Neural GGUF.
+// Se positivo, a Engine V24 injetará esse arquivo via VFS Paging O(1), cortando os limites 
+// nos tensores matriciais invés de offsets aleatórios.
+func IsNeuralGGUF(buf []byte) bool {
+	if len(buf) >= 4 && string(buf[0:4]) == "GGUF" {
+		return true
+	}
+	return false
 }
 

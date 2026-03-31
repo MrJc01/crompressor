@@ -66,6 +66,19 @@ func DefaultPackOptions() PackOptions {
 	}
 }
 
+type progressWriter struct {
+	w io.Writer
+	onProgress func(int)
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	n, err := pw.w.Write(p)
+	if n > 0 && pw.onProgress != nil {
+		pw.onProgress(n)
+	}
+	return n, err
+}
+
 // Memory block size to process per batch (16 MB)
 const BlockSize = 16 * 1024 * 1024
 
@@ -198,9 +211,11 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 			fullData, _ := io.ReadAll(io.TeeReader(inFile, hasher))
 			enc, err := crypto.Encrypt(derivedKey, fullData)
 			if err != nil { return nil, err }
-			outFile.Write(enc)
+			pw := &progressWriter{w: outFile, onProgress: opts.OnProgress}
+			pw.Write(enc)
 		} else {
-			io.Copy(io.MultiWriter(outFile, hasher), inFile)
+			pw := &progressWriter{w: outFile, onProgress: opts.OnProgress}
+			io.Copy(io.MultiWriter(pw, hasher), inFile)
 		}
 		
 		// Update header hash

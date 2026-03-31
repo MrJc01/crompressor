@@ -34,6 +34,7 @@ import (
 	"github.com/MrJc01/crompressor/internal/trainer"
 	"github.com/MrJc01/crompressor/internal/vfs"
 	"github.com/MrJc01/crompressor/pkg/cromlib"
+	cvfs "github.com/MrJc01/crompressor/pkg/cromlib/vfs"
 	"github.com/MrJc01/crompressor/pkg/format"
 	cromsync "github.com/MrJc01/crompressor/pkg/sync"
 	"github.com/MrJc01/crompressor/internal/cromfs"
@@ -72,6 +73,7 @@ mapas de referências determinísticos com fidelidade bit-a-bit.
 	rootCmd.AddCommand(shareCmd())
 	rootCmd.AddCommand(cromfsCmd())
 	rootCmd.AddCommand(grepCmd())
+	rootCmd.AddCommand(llmVfsCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -1086,5 +1088,30 @@ func grepCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&inputPath, "input", "i", "", "Caminho do arquivo .crom alvo (aceita URLs HTTP/HTTPS para busca remota S3/CDN)")
 	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Caminho do Codebook (Dicionário de Referência)")
 	
+	return cmd
+}
+
+func llmVfsCmd() *cobra.Command {
+	var mountPoint string
+
+	cmd := &cobra.Command{
+		Use:   "llm-vfs",
+		Short: "Monta o Daemon VFS puramente O(1) Paging para LLMs (Out-of-Core)",
+		Long:  `Monta uma abstração CROM-FS no diretório especificado para hospedar arquivos .gguf virtuais gigantes e paginar requisições em O(1) via dicionário JIT, bypassando limites da RAM física.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if mountPoint == "" {
+				return fmt.Errorf("flag --mountpoint obrigatória")
+			}
+			fmt.Println("╔═══════════════════════════════════════════╗")
+			fmt.Println("║     CROM LLM-VFS (Out-Of-Core Paging)     ║")
+			fmt.Println("╠═══════════════════════════════════════════╣")
+			fmt.Printf("║  Target Mount: %-26s ║\n", mountPoint)
+			fmt.Printf("║  Mode:         %-26s ║\n", "JIT / Zero-Copy")
+			fmt.Println("╚═══════════════════════════════════════════╝")
+			
+			return cvfs.MountServer(mountPoint)
+		},
+	}
+	cmd.Flags().StringVarP(&mountPoint, "mountpoint", "m", "", "Diretório virtual host /mnt/crom_llm")
 	return cmd
 }

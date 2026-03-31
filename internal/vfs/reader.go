@@ -23,6 +23,7 @@ type RandomReader struct {
 	cb           *codebook.Reader
 	cache        *BlockCache
 	derivedKey   []byte
+	dataOffset   int64 // Absolute offset where raw passthrough data or the first block starts
 
 	mu sync.Mutex // Protects cache/disk reads to avoid redundant decompression of the same block
 }
@@ -80,6 +81,7 @@ func NewRandomReader(f io.ReaderAt, fileSize int64, header *format.Header, block
 		rr.blockOffsets[i] = current
 		current += int64(size)
 	}
+	rr.dataOffset = baseOffset
 
 	return rr, nil
 }
@@ -96,6 +98,12 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 	}
 
 	dest = dest[:bytesToRead]
+	
+	// Fast path for Passthrough files (0 chunks)
+	if rr.header.ChunkCount == 0 {
+		return rr.file.ReadAt(dest, rr.dataOffset+off)
+	}
+
 	bytesRead := 0
 
 	for bytesRead < int(bytesToRead) {
