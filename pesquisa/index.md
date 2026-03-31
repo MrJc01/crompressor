@@ -1,4 +1,4 @@
-# 🧪 Pesquisa e Viabilidade Técnica: Crompressor V16
+# 🧪 Pesquisa e Viabilidade Técnica: Crompressor V20
 
 Este arquivo é o ponto central de auditoria para todos os experimentos de compressão soberana.
 
@@ -22,6 +22,20 @@ Este arquivo é o ponto central de auditoria para todos os experimentos de compr
 - 📄 [13 Epigenetic P2p Mesh](./13-epigenetic_p2p_mesh/relatorio.md)
 - 📄 [14 Semantic Cdc Benchmark](./14-semantic_cdc_benchmark/relatorio.md)
 - 📄 [15 Hive Mind Trust Attack](./15-hivemind_trust_attack/relatorio.md)
+- 📄 [16 SIMD Assembly Benchmark](./16-simd_assembly_benchmark/relatorio.md)
+- 📄 [17 Codebook Sharding OOM](./17-codebook_sharding_oom/relatorio.md)
+
+### 🔭 The Exabyte Frontier (V21/V22)
+- 📄 [18 Swarm Federated Learning](./18-swarm_federated_learning/relatorio.md)
+- 📄 [19 Semantic Domain Routing](./19-semantic_domain_routing/relatorio.md)
+- 📄 [20 Codebook Radioactive Decay](./20-codebook_radioactive_decay/relatorio.md)
+- 📄 [21 Temporal Shift Compression](./21-temporal_shift_compression/relatorio.md)
+- 📄 [22 GPU HNSW Offload CUDA](./22-gpu_hnsw_offload_cuda/relatorio.md)
+- 📄 [23 Hyper Sparse Delta Encoding](./23-hyper_sparse_delta_encoding/relatorio.md)
+- 📄 [24 Cold Storage Crystallization](./24-cold_storage_crystallization/relatorio.md)
+- 📄 [25 Zero Knowledge Codebook Poisoning](./25-zero_knowledge_codebook_poisoning/relatorio.md)
+- 📄 [26 Forward Error Correction P2P](./26-forward_error_correction_p2p/relatorio.md)
+- 📄 [27 Quantum Resistant GossipSub](./27-quantum_resistant_gossipsub/relatorio.md)
 
 ---
 

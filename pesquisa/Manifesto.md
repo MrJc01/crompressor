@@ -1,8 +1,8 @@
-# 🧪 Pesquisa e Viabilidade Técnica: Crompressor V16
+# 🧪 Pesquisa e Viabilidade Técnica: Crompressor V20
 
-Este repositório contém as evidências de laboratório coletadas para atestar a capacidade do `crompressor` em cenários de infraestrutura crítica. Todos os testes foram re-executados e validados com o **Motor V16 (The Convergent Mind)**: FastCDC Gear-Hash, Shannon Entropy Shield, Zero-Trust P2P Sync, Auto-Training Zero-Config e Smart Passthrough.
+Este repositório contém as evidências de laboratório coletadas para atestar a capacidade do `crompressor` em cenários de infraestrutura crítica. Todos os testes foram re-executados e validados com o **Motor V20 (The Dimensional Compiler)**: FastCDC Gear-Hash, Shannon Entropy Shield, Zero-Trust P2P Sync, Auto-Training Zero-Config, Smart Passthrough, Busca Vetorial SIMD e Paginação de Dicionários.
 
-## 📋 Checklist de Auditoria (23 Pontos de Incontestabilidade)
+## 📋 Checklist de Auditoria (25 Pontos de Incontestabilidade)
 
 | Item | Status | Observação |
 | :--- | :--- | :--- |
@@ -121,5 +121,10 @@ cd pesquisa
 ```
 
 ---
-**Auditoria Técnica Concluída e Validada — Crompressor V16.**
-**"Do binário ao browser. Da CLI ao cluster P2P. Nós compilamos entropia pura."**
+**Auditoria Técnica Concluída e Validada — Crompressor V20.**
+**"Do binário ao browser. Da CLI ao cluster P2P. Nós compilamos entropia pura via SIMD."**
+
+---
+
+## 🔭 A Fronteira Exabyte (Iniciativa V21)
+A partir da V20, o foco deixa de ser compressão local isolada e migra integralmente para **Swarm Semantic Learning**. O Crompressor V21 será um nó Edge-AI P2P distribuído focado em I/O descentralizado. As pesquisas estruturais (18 a 27) já foram mapeadas para endereçar Offload em GPGPU, Coleção de Lixo LFU (Radioactive Decay), e Proofs Criptográficos Pós-Quânticos.

@@ -32,7 +32,7 @@ O CROM não comprime — ele **compila**. Transforma dados brutos em um **mapa d
                      └─────────────┘
 ```
 
-## Pilares do Projeto (Crompressor V16)
+## Pilares do Projeto (Crompressor V20)
 
 | Pilar | Descrição |
 |---|---|
@@ -55,7 +55,7 @@ crompressor-pack (Compilador)                    crompressor-unpack (Decompilado
 └─────────────────────┘                   └──────────────────────────┘
 ```
 
-## Quick Start (V16)
+## Quick Start (V20)
 
 ```bash
 # Compilar (Modo Zero-Config com Auto-Training nativo)
