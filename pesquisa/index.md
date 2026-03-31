@@ -62,6 +62,23 @@ Este arquivo é o ponto central de auditoria para todos os experimentos de compr
 - 📄 [51 SETI Telescope Cosmic Delta](./51-radio_telescope_seti_delta/relatorio.md)
 - 📄 [52 Cyber-Robotics ROS2 DDS Swarm](./52-cyber_robotics_ros2_dds/relatorio.md)
 - 📄 [53 DNA Synthetic Biology Storage](./53-synthetic_biology_storage/relatorio.md)
+- 📄 [54 CERN LHC Dark Matter](./54-cern_lhc_dark_matter/relatorio.md)
+- 📄 [55 Quantum Entanglement Base](./55-quantum_entanglement_state_vector/relatorio.md)
+- 📄 [56 Tokamak Nuclear Fusion Plasma](./56-tokamak_nuclear_fusion_plasma/relatorio.md)
+- 📄 [57 Brain Hologram Visual Cortex](./57-brain_hologram_visual_cortex/relatorio.md)
+- 📄 [58 Global Seismograph Array](./58-global_seismograph_array_tectonics/relatorio.md)
+- 📄 [59 Nanosecond HFT Stock Market](./59-nanosecond_hft_stock_market/relatorio.md)
+- 📄 [60 Neuralink Spine Motor Bypass](./60-neuralink_spine_motor_bypass/relatorio.md)
+- 📄 [61 Submarine Deep Ocean Mesh](./61-submarine_deep_ocean_mesh/relatorio.md)
+- 📄 [62 Military UAV Hive Swarm](./62-military_uav_hive_swarm/relatorio.md)
+- 📄 [63 James Webb Exoplanet Spectra](./63-james_webb_exoplanet_spectra/relatorio.md)
+- 📄 [64 Global Carbon IoT Grid](./64-global_carbon_iot_grid/relatorio.md)
+- 📄 [65 AlphaFold Protein Morphogenesis](./65-alphafold_protein_morphogenesis/relatorio.md)
+- 📄 [66 Asteroid Mining LiDAR](./66-asteroid_mining_lidar_micro_g/relatorio.md)
+- 📄 [67 Whole Brain Emulation](./67-whole_brain_emulation_connectome/relatorio.md)
+- 📄 [68 Tachyon Predictive Time Delta](./68-tachyon_predictive_time_delta/relatorio.md)
+- 📄 [69 Cybernetic Firmware OTA](./69-cybernetic_firmware_ota_fec/relatorio.md)
+- 📄 [70 Dyson Sphere Energy Routing](./70-dyson_sphere_energy_routing/relatorio.md)
 
 ---
 
