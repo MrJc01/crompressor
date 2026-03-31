@@ -557,7 +557,7 @@ cd ../../
 echo ""
 echo "╔══════════════════════════════════════════════════════════════════╗"
 echo "║  ✅ [ALL DONE] Auditoria Singularity de 01 a 90 concluída!     ║"
-echo "║  🌐 Para testes WEB (91-100), execute:                         ║"
+echo "║  🌐 Para testes WEB (91-101), execute:                         ║"
 echo "║     cd pesquisa && python3 -m http.server 8091                 ║"
 echo "║     Abra: http://localhost:8091/web_audit_lab.html             ║"
 echo "╚══════════════════════════════════════════════════════════════════╝"

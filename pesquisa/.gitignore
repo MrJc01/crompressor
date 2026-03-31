@@ -500,6 +500,16 @@ datasets/*
 !98-web_particle_physics_collider/
 !99-web_galaxy_nbody_gravitational_sim/
 !100-web_artificial_life_evolution_sim/
+!101-web_llm_crom_engine/
+!101-web_llm_crom_engine/*.js
+!101-web_llm_crom_engine/*.md
+
+!102-native_llm_humble_pc/
+102-native_llm_humble_pc/bin/*
+102-native_llm_humble_pc/models/*
+!102-native_llm_humble_pc/*.md
+!102-native_llm_humble_pc/scripts/
+!102-native_llm_humble_pc/scripts/*.sh
+
 !web_audit_lab.html
 !*.html
-

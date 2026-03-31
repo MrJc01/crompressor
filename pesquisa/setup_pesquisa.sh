@@ -26,30 +26,41 @@ if [ -f "$PROJECT_DIR/Manifesto.md" ]; then
     echo "- 📄 **[Manifesto de Auditoria](./Manifesto.md)**" >> "$INDEX_FILE"
 fi
 
-# 2. Listar relatórios reais (Excluir Manifesto, Index, e pastas auxiliares)
+# 2. Listar todas as pastas numeradas de pesquisas (01 a 101)
 # Lógica: Usa o nome da pasta como Label para hierarquia clara.
-find . -name "*.md" \
-    -not -name "index.md" \
-    -not -name "Manifesto.md" \
-    -not -path "./datasets/*" \
-    -not -path "./scripts/*" | sort | while read FILE; do
+find . -maxdepth 1 -type d -name "[0-9]*" | sort -V | while read DIR; do
+    CLEAN_PATH="${DIR#./}"
+    LABEL=$(echo "$CLEAN_PATH" | sed 's/-/ /g' | sed 's/_/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2)} 1')
     
-    CLEAN_PATH="${FILE#./}"
-    DIR_NAME=$(dirname "$CLEAN_PATH")
-    
-    if [ "$DIR_NAME" == "." ]; then
-        # Arquivos na raiz (se houver outros além do manifesto)
-        FILE_NAME=$(basename "$CLEAN_PATH" .md)
-        LABEL=$(echo "$FILE_NAME" | sed 's/_/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2)} 1')
+    # Verifica qual o arquivo principal da pasta para linkar (HTML ou MD)
+    if [ -f "$DIR/index.html" ]; then
+        echo "- 🌐 [$LABEL](./$CLEAN_PATH/index.html)" >> "$INDEX_FILE"
+    elif [ -f "$DIR/relatorio.md" ]; then
+        echo "- 📄 [$LABEL](./$CLEAN_PATH/relatorio.md)" >> "$INDEX_FILE"
+    elif [ -f "$DIR/Relatorio_Gzip_Zstd_Crompressor.md" ]; then
+        echo "- 📄 [$LABEL](./$CLEAN_PATH/Relatorio_Gzip_Zstd_Crompressor.md)" >> "$INDEX_FILE"
     else
-        # Usar o Nome da Pasta como Label (ex: 01-logs_redundancia -> 01 Logs Redundancia)
-        LABEL=$(echo "$DIR_NAME" | sed 's/-/ /g' | sed 's/_/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2)} 1')
+        # Se não tem relatório md, cria um placeholder genérico para constatar no index
+        echo "# Relatório Ausente (Terminal-Only Audit)
+Este experimento foi rodado via terminal e ainda não gerou um artefato markdown consolidado." > "$DIR/relatorio.md"
+        echo "- 📄 [$LABEL](./$CLEAN_PATH/relatorio.md)" >> "$INDEX_FILE"
     fi
-    
-    echo "- 📄 [$LABEL](./$CLEAN_PATH)" >> "$INDEX_FILE"
 done
 
 cat <<EOF >> "$INDEX_FILE"
+
+---
+
+## 🌐 Plataforma de Testes Web (Testes 91-101)
+
+Para auditar as simulações gráficas, aceleração 3D e laboratórios de Inteligência Artificial in-browser (LLMs / WebGPU), inicie o hub local:
+
+\`\`\`bash
+cd pesquisa
+python3 -m http.server 8091
+\`\`\`
+
+Em seguida, acesse no navegador: **\`http://localhost:8091/web_audit_lab.html\`**
 
 ---
 
