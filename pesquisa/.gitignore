@@ -26,6 +26,28 @@
 !13-epigenetic_p2p_mesh/
 !14-semantic_cdc_benchmark/
 !15-hivemind_trust_attack/
+!16-simd_assembly_benchmark/
+!17-codebook_sharding_oom/
+!18-swarm_federated_learning/
+!19-semantic_domain_routing/
+!20-codebook_radioactive_decay/
+!21-temporal_shift_compression/
+!22-gpu_hnsw_offload_cuda/
+!23-hyper_sparse_delta_encoding/
+!24-cold_storage_crystallization/
+!25-zero_knowledge_codebook_poisoning/
+!26-forward_error_correction_p2p/
+!27-quantum_resistant_gossipsub/
+!28-cross_platform_compilation/
+!29-video_stream_delta/
+!30-game_assets_deduplication/
+!31-os_level_caching/
+!32-ipc_uds_latency/
+!33-satellite_simulation_fec/
+!34-thermal_throttling_edge/
+!35-hybrid_quantum_bench/
+!36-cuda_sandbox_validation/
+!37-exabyte_codebook_scale/
 
 # 🚫 Ignorar dados binários e logs dentro das pastas de teste
 01-logs_redundancia/*
