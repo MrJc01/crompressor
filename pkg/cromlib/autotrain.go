@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/MrJc01/crompressor/internal/entropy"
 	"github.com/MrJc01/crompressor/internal/trainer"
 )
 
@@ -31,6 +32,21 @@ func AutoPack(inputPath, outputPath string, opts PackOptions) (*Metrics, error) 
 	if err != nil {
 		return nil, fmt.Errorf("autotrain: open input: %w", err)
 	}
+	defer srcFile.Close()
+
+	// EXPERT ROUTING: Early Entropy Guard
+	eScore, startBytes, err := entropy.Analyze(srcFile, 65536)
+	if err != nil {
+		return nil, fmt.Errorf("autotrain: entropy analysis: %w", err)
+	}
+
+	// If it's urandom (High Entropy) or zeros (Low Entropy), skip BPE loop!
+	if entropy.DetectHeuristicBypass(eScore, startBytes) || entropy.IsLowEntropy(eScore) {
+		// Call Pack directly, which will handle the passthrough or fast-path
+		return Pack(inputPath, outputPath, "", opts)
+	}
+	
+	srcFile.Seek(0, 0)
 
 	samplePath := filepath.Join(trainDir, filepath.Base(inputPath))
 	dstFile, err := os.Create(samplePath)
@@ -39,11 +55,9 @@ func AutoPack(inputPath, outputPath string, opts PackOptions) (*Metrics, error) 
 		return nil, fmt.Errorf("autotrain: create sample: %w", err)
 	}
 
-	// Copy up to 2MB for fast training (sampling)
 	maxSample := int64(2 * 1024 * 1024)
 	io.CopyN(dstFile, srcFile, maxSample)
 	dstFile.Close()
-	srcFile.Close()
 
 	// 3. Train an ephemeral BPE codebook
 	brainPath := filepath.Join(tmpDir, "ephemeral.cromdb")

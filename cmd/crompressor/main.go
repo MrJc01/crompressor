@@ -42,7 +42,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var version = "0.1.0-dev"
+var version = "24.0.0-Singularity"
 
 func main() {
 	rootCmd := &cobra.Command{
@@ -534,6 +534,7 @@ func packCmd() *cobra.Command {
 				metrics.PackedSize,
 				float64(metrics.PackedSize)/float64(metrics.OriginalSize)*100)
 			fmt.Printf("  Hit Rate:      %.2f%% dos chunks no Radar\n", metrics.HitRate)
+			fmt.Printf("  Data Entropy:  %.2f bits/byte\n", metrics.Entropy)
 
 			var litPct float64
 			if metrics.TotalChunks > 0 {

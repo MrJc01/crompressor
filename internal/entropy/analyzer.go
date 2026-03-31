@@ -58,6 +58,10 @@ func DetectHeuristicBypass(entropy float64, buf []byte) bool {
 		if buf[0] == 0x7F && buf[1] == 0x45 && buf[2] == 0x4C && buf[3] == 0x46 {
 			return true
 		}
+		// GGUF Neural Weights
+		if string(buf[0:4]) == "GGUF" {
+			return true
+		}
 		// JPEG/JPG
 		if buf[0] == 0xFF && buf[1] == 0xD8 && buf[2] == 0xFF {
 			return true
@@ -75,6 +79,11 @@ func DetectHeuristicBypass(entropy float64, buf []byte) bool {
 	}
 
 	return false
+}
+
+// IsLowEntropy checks if data is extremely repetitive or highly compressible (e.g. all-zeros).
+func IsLowEntropy(entropy float64) bool {
+	return entropy < 1.0
 }
 
 // Shannon quickly calculates the entropy of an in-memory byte slice.

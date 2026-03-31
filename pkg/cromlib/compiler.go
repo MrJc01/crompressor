@@ -53,6 +53,7 @@ type Metrics struct {
 	SuggestedMicroBrain bool   // O(1) Telemetry flag hinting an Epigenetic spawn is justified (> 1000 repetitions)
 	TotalChunks    int     // Total number of chunks processed
 	AvgSimilarity  float64 // Average similarity across all chunks (0.0-1.0)
+	Entropy        float64 // Detected Shannon Entropy
 }
 
 // DefaultPackOptions returns sensible defaults.
@@ -81,12 +82,12 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	}
 	defer inFile.Close()
 
-	// 1. Analyze Entropy
-	eScore, startBytes, err := entropy.Analyze(inFile, 8192)
+	// 1. Analyze Entropy (Use 64KB for better representation)
+	eScore, startBytes, err := entropy.Analyze(inFile, 65536)
 	if err != nil {
 		return nil, fmt.Errorf("pack: entropy analysis: %w", err)
 	}
-	isPassthrough := entropy.DetectHeuristicBypass(eScore, startBytes)
+	isPassthrough := entropy.DetectHeuristicBypass(eScore, startBytes) || entropy.IsLowEntropy(eScore)
 
 	// Adaptive Chunk Size Configuration
 	if opts.ChunkSize <= 0 {
@@ -131,6 +132,12 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		return nil, err
 	}
 	originalSize := uint64(info.Size())
+
+	// Small File Guard: don't bother compressing if it adds overhead
+	if originalSize < 256 {
+		isPassthrough = true
+	}
+
 	// Pre-calculate an estimate for dummy space allocation.
 	// The REAL chunk count will be set after the processing loop.
 	numEstimatedChunks := uint32((originalSize + uint64(opts.ChunkSize) - 1) / uint64(opts.ChunkSize))
@@ -211,6 +218,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 			PackedSize:   packedSize,
 			Duration:     duration,
 			HitRate:      100,
+			Entropy:      eScore,
 		}, nil
 	}
 
@@ -682,6 +690,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 			HitRate:       100,
 			AvgSimilarity: 0,
 			TotalChunks:   0,
+			Entropy:       eScore,
 		}, nil
 	}
 	
@@ -698,5 +707,6 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		SuggestedMicroBrain: suggestMicroBrain,
 		TotalChunks:   totalChunks,
 		AvgSimilarity: avgSim,
+		Entropy:       eScore,
 	}, nil
 }
