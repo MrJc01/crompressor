@@ -10,7 +10,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║      Mestre de Auditoria CROM (Testes 01-37)         ║"
+echo "║      Mestre de Auditoria CROM (Testes 01-53)         ║"
 echo "╚══════════════════════════════════════════════════════╝"
 
 echo "🔨 Construindo Crompressor na RAIZ..."
@@ -230,4 +230,100 @@ cd 37-exabyte_codebook_scale/scripts
 bash 01_test.sh
 cd ../../
 
-echo "✅ [ALL DONE] Auditoria Padrão Exabyte Completa de 01 a 37 concluída com sucesso."
+# Bateria 38: LLM Weights Deduplication
+echo "▶️ Iniciando Bateria 38 (LLM Weights Deduplication)..."
+cd 38-llm_weights_deduplication/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 39: DNA Genomic Compression
+echo "▶️ Iniciando Bateria 39 (DNA Genomic Compression)..."
+cd 39-dna_genomic_compression/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 40: WebAssembly Browser Edge Node
+echo "▶️ Iniciando Bateria 40 (WebAssembly Browser Edge Node)..."
+cd 40-wasm_browser_edge/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 41: Blockchain Merkle Patricia Trie
+echo "▶️ Iniciando Bateria 41 (Blockchain Merkle Patricia Trie)..."
+cd 41-blockchain_merkle_trie/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 42: Distributed RAM Codebook Pool
+echo "▶️ Iniciando Bateria 42 (Distributed RAM Codebook Pool)..."
+cd 42-distributed_ram_pool/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 43: Real-time WebRTC Audio VoIP
+echo "▶️ Iniciando Bateria 43 (Real-time WebRTC Audio VoIP)..."
+cd 43-webrtc_voip_delta/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 44: AI Telepathy Federated Mesh
+echo "▶️ Iniciando Bateria 44 (AI Telepathy Federated Mesh)..."
+cd 44-ai_telepathy_federated_mesh/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 45: IPFS Core Bypass
+echo "▶️ Iniciando Bateria 45 (IPFS Core Bypass)..."
+cd 45-ipfs_core_bypass/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 46: Brain-Computer Interface EEG
+echo "▶️ Iniciando Bateria 46 (Brain-Computer Interface EEG)..."
+cd 46-brain_computer_interface_eeg/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 47: Exa-Scale PostgreSQL WAL CDC
+echo "▶️ Iniciando Bateria 47 (Exa-Scale PostgreSQL WAL CDC)..."
+cd 47-exa_scale_database_cdc/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 48: Holographic NeRF 3D Streaming
+echo "▶️ Iniciando Bateria 48 (Holographic NeRF 3D Streaming)..."
+cd 48-holographic_nerf_streaming/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 49: Post-Quantum L3 ZK-Rollups 
+echo "▶️ Iniciando Bateria 49 (Post-Quantum L3 ZK-Rollups)..."
+cd 49-zk_rollups_layer3/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 50: Kubernetes Zero-Gravity CNI Sockets
+echo "▶️ Iniciando Bateria 50 (Kubernetes Zero-Gravity CNI)..."
+cd 50-zero_gravity_kubernetes_cni/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 51: SETI Radio-Telescope Cosmic Delta
+echo "▶️ Iniciando Bateria 51 (SETI Radio-Telescope Cosmic Delta)..."
+cd 51-radio_telescope_seti_delta/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 52: Cyber-Robotics ROS2 DDS Swarm
+echo "▶️ Iniciando Bateria 52 (Cyber-Robotics ROS2 DDS Swarm)..."
+cd 52-cyber_robotics_ros2_dds/scripts
+bash 01_test.sh
+cd ../../
+
+# Bateria 53: DNA Synthetic Biology Storage
+echo "▶️ Iniciando Bateria 53 (DNA Synthetic Biology Storage)..."
+cd 53-synthetic_biology_storage/scripts
+bash 01_test.sh
+cd ../../
+
+echo "✅ [ALL DONE] Auditoria Sci-Fi Exabyte Completa de 01 a 53 concluída com sucesso."

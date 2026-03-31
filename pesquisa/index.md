@@ -46,6 +46,22 @@ Este arquivo é o ponto central de auditoria para todos os experimentos de compr
 - 📄 [35 Hybrid Quantum Bench](./35-hybrid_quantum_bench/relatorio.md)
 - 📄 [36 CUDA Sandbox Validation](./36-cuda_sandbox_validation/relatorio.md)
 - 📄 [37 Exabyte Codebook Scale](./37-exabyte_codebook_scale/relatorio.md)
+- 📄 [38 LLM Weights Deduplication](./38-llm_weights_deduplication/relatorio.md)
+- 📄 [39 DNA Genomic Compression](./39-dna_genomic_compression/relatorio.md)
+- 📄 [40 Wasm Browser Edge](./40-wasm_browser_edge/relatorio.md)
+- 📄 [41 Blockchain Merkle Trie](./41-blockchain_merkle_trie/relatorio.md)
+- 📄 [42 Distributed RAM Pool](./42-distributed_ram_pool/relatorio.md)
+- 📄 [43 WebRTC VoIP Delta](./43-webrtc_voip_delta/relatorio.md)
+- 📄 [44 AI Telepathy Federated Mesh](./44-ai_telepathy_federated_mesh/relatorio.md)
+- 📄 [45 IPFS Core Bypass](./45-ipfs_core_bypass/relatorio.md)
+- 📄 [46 BCI EEG Real-time](./46-brain_computer_interface_eeg/relatorio.md)
+- 📄 [47 Exa-Scale DB PostgreSQL WAL CDC](./47-exa_scale_database_cdc/relatorio.md)
+- 📄 [48 NeRF Holographic 3D Streaming](./48-holographic_nerf_streaming/relatorio.md)
+- 📄 [49 Post-Quantum L3 ZK-Rollups](./49-zk_rollups_layer3/relatorio.md)
+- 📄 [50 Kubernetes Zero-Gravity CNI Sockets](./50-zero_gravity_kubernetes_cni/relatorio.md)
+- 📄 [51 SETI Telescope Cosmic Delta](./51-radio_telescope_seti_delta/relatorio.md)
+- 📄 [52 Cyber-Robotics ROS2 DDS Swarm](./52-cyber_robotics_ros2_dds/relatorio.md)
+- 📄 [53 DNA Synthetic Biology Storage](./53-synthetic_biology_storage/relatorio.md)
 
 ---
 
