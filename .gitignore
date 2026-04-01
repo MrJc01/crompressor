@@ -38,6 +38,26 @@ coverage.out
 
 # ═══ Logs ═══
 *.log
+*.crom
+*.sqsh
+*.cromdb
+crompressor-novo
+
+# ═══ SRE / Imagens Virtuais ═══
+trabalho/minecraft_client/tlauncher/
+trabalho/minecraft_client/vfs_output/
+trabalho/minecraft_test/world*/
+trabalho/minecraft_test/libraries/
+trabalho/minecraft_test/plugins/
+trabalho/minecraft_test/cache/
+trabalho/minecraft_test/logs/
+trabalho/minecraft_test/versions/
+trabalho/minecraft_test/*.jar
+trabalho/crompressor/
+*.bak_sre
+*_pool.crom
+/tmp/vfs_*
+/tmp/vfs_*
 
 # ═══ Pesquisas & Benchmarks ═══
 pesquisa/**/results/*
