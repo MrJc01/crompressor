@@ -3,12 +3,14 @@ package vfs
 import (
 	"fmt"
 	"io"
+	"os"
 	"sync"
 
 	"github.com/MrJc01/crompressor/internal/chunker"
 	"github.com/MrJc01/crompressor/internal/codebook"
 	"github.com/MrJc01/crompressor/internal/crypto"
 	"github.com/MrJc01/crompressor/internal/delta"
+	"github.com/MrJc01/crompressor/internal/fractal"
 	"github.com/MrJc01/crompressor/pkg/format"
 )
 
@@ -99,8 +101,8 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 
 	dest = dest[:bytesToRead]
 	
-	// Fast path for Passthrough files (0 chunks)
-	if rr.header.ChunkCount == 0 {
+	// Fast path for Passthrough files (0 chunks or IsPassthrough flag)
+	if rr.header.ChunkCount == 0 || rr.header.IsPassthrough {
 		return rr.file.ReadAt(dest, rr.dataOffset+off)
 	}
 
@@ -129,14 +131,19 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 		
 		if cachedChunk, ok := rr.memCache.Get(int64(chunkIndex)); ok {
 			reconstructedChunk = cachedChunk
+		} else if entry.CodebookIndex == format.FractalCodebookIndex {
+			// V26 Fractal Engine FAST-PATH: No pool access needed
+			seed := int64(entry.CodebookID)
+			reconstructedChunk = fractal.GeneratePolynomial(seed, int(entry.OriginalSize))
 		} else {
 			// Get uncompressed Delta Pool for this block if not in L2
 			pool, err := rr.loadBlockPool(blockID)
 			if err != nil {
+				fmt.Fprintf(os.Stderr, "[VFS-DETECTOR] Falha loadBlockPool blocID=%d: %v\n", blockID, err)
 				return bytesRead, fmt.Errorf("vfs: read block %d: %w", blockID, err)
 			}
 	
-			// Calculate localized block start offset (the global stream offset of the first chunk in this block)
+			// Calculate localized block start offset
 			blockStartChunkIdx := int64(blockID) * int64(format.ChunksPerBlock)
 			blockStartGlobalOffset := rr.entries[blockStartChunkIdx].DeltaOffset
 	
@@ -144,6 +151,7 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 	
 			endOffset := entryLocalOffset + uint64(entry.DeltaSize)
 			if endOffset > uint64(len(pool)) {
+				fmt.Fprintf(os.Stderr, "[VFS-DETECTOR] Delta Bounds Error: chunk=%d localOff=%d endOff=%d poolLen=%d (blockID=%d)\n", chunkIndex, entryLocalOffset, endOffset, len(pool), blockID)
 				return bytesRead, fmt.Errorf("vfs: delta bounds error on chunk %d", chunkIndex)
 			}
 	
@@ -152,32 +160,32 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 			if entry.CodebookID == format.LiteralCodebookID {
 				reconstructedChunk = res
 			} else {
-			isPatch := (entry.CodebookID & format.FlagIsPatch) != 0
-			// Mask out Tier bits and Patch flag (clear upper 4 bits)
-			cleanID := entry.CodebookID & 0x0FFFFFFFFFFFFFFF
-			pattern, err := rr.cb.Lookup(cleanID)
-			if err != nil {
-				return bytesRead, fmt.Errorf("vfs: lookup codeword %d: %w", cleanID, err)
-			}
-
-			usablePattern := pattern
-			if uint32(len(usablePattern)) > entry.OriginalSize {
-				usablePattern = usablePattern[:entry.OriginalSize]
-			}
-
-			if isPatch {
-				reconstructedChunk, err = delta.ApplyPatch(usablePattern, res)
+				isPatch := (entry.CodebookID & format.FlagIsPatch) != 0
+				cleanID := entry.CodebookID & 0x0FFFFFFFFFFFFFFF
+				pattern, err := rr.cb.Lookup(cleanID)
 				if err != nil {
-					reconstructedChunk = res
+					fmt.Fprintf(os.Stderr, "[VFS-DETECTOR] Codeword Lookup Fail: ID=%d: %v\n", cleanID, err)
+					return bytesRead, fmt.Errorf("vfs: lookup codeword %d: %w", cleanID, err)
 				}
-			} else {
-				if uint32(len(res)) > entry.OriginalSize {
-					res = res[:entry.OriginalSize]
+
+				usablePattern := pattern
+				if uint32(len(usablePattern)) > entry.OriginalSize {
+					usablePattern = usablePattern[:entry.OriginalSize]
 				}
-				reconstructedChunk = delta.Apply(usablePattern, res)
+
+				if isPatch {
+					reconstructedChunk, err = delta.ApplyPatch(usablePattern, res)
+					if err != nil {
+						reconstructedChunk = res
+					}
+				} else {
+					if uint32(len(res)) > entry.OriginalSize {
+						res = res[:entry.OriginalSize]
+					}
+					reconstructedChunk = delta.Apply(usablePattern, res)
+				}
 			}
 		}
-		} // Closes L2 Cache else
 
 		// Clamp reconstructedChunk to entry.OriginalSize
 		if uint32(len(reconstructedChunk)) > entry.OriginalSize {

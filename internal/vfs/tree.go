@@ -27,6 +27,7 @@ var _ = (fs.NodeReaddirer)((*TreeInode)(nil))
 var _ = (fs.NodeLookuper)((*TreeInode)(nil))
 var _ = (fs.NodeGetattrer)((*TreeInode)(nil))
 var _ = (fs.NodeReader)((*TreeInode)(nil))
+var _ = (fs.NodeOpener)((*TreeInode)(nil))
 var _ = (fs.NodeWriter)((*TreeInode)(nil))
 
 func (n *TreeInode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
@@ -95,6 +96,12 @@ func (n *TreeInode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	}
 
 	return fs.NewListDirStream(entries), 0
+}
+	
+func (n *TreeInode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
+	// A API fs do go-fuse permite retornar nil como handle se não precisarmos de estado por arquivo.
+	// O importante é retornar SUCCESS (0) para o Kernel permitir a abertura.
+	return nil, 0, 0
 }
 
 func (n *TreeInode) Read(ctx context.Context, fh fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {

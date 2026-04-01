@@ -114,39 +114,47 @@ function mount_crom_vfs() {
     local file_name="$2"
     local cb_path="$MODEL_DIR/global_llm_brain.cromdb"
     
-    mkdir -p /tmp/crom_llm
-    fusermount -u /tmp/crom_llm 2>/dev/null
+    local mount_point="/tmp/crom_vfs_inference"
+    mkdir -p "$mount_point"
+    # Cleanup agressivo (Lazy + Zulu local)
+    umount -l "$mount_point" 2>/dev/null
+    fusermount -uz "$mount_point" 2>/dev/null
+    rm -rf "$mount_point"/.fuse_connection* 2>/dev/null
     sleep 1
     
     echo -e "${CYAN}🔌 Montando VFS FUSE real do Crompressor...${RESET}" >&2
-    "$CROM_BIN" mount -i "$crom_path" -m /tmp/crom_llm -c "$cb_path" > /tmp/crom_vfs_daemon.log 2>&1 &
+    "$CROM_BIN" mount -i "$crom_path" -m "$mount_point" -c "$cb_path" > /tmp/crom_vfs_daemon.log 2>&1 &
     VFS_PID=$!
-    sleep 3
     
-    # Descobrir o nome do arquivo exposto pelo FUSE
-    local run_path="/tmp/crom_llm/$file_name"
-    if [ ! -f "$run_path" ]; then
-        run_path=$(find /tmp/crom_llm -type f 2>/dev/null | head -n 1)
-    fi
+    # Aguardar montagem ativa
+    local timeout=10
+    local elapsed=0
+    while [ $elapsed -lt $timeout ]; do
+        if mountpoint -q "$mount_point"; then
+            break
+        fi
+        sleep 0.5
+        elapsed=$((elapsed + 1))
+    done
     
-    if [ -z "$run_path" ] || [ ! -f "$run_path" ]; then
-        echo -e "${RED}❌ Falha na montagem VFS FUSE. Log:${RESET}" >&2
-        cat /tmp/crom_vfs_daemon.log 2>/dev/null | tail -5 >&2
-        kill -9 "$VFS_PID" 2>/dev/null
-        VFS_PID=""
+    if ! mountpoint -q "$mount_point"; then
+        echo -e "${RED}❌ Falha crítica ao montar VFS FUSE.${RESET}" >&2
         return 1
     fi
     
+    local run_path="$mount_point/$file_name"
     echo -e "${GREEN}✔ VFS Ativo (PID: $VFS_PID) → $run_path${RESET}" >&2
     echo "$run_path"
-    return 0
 }
 
 function cleanup_vfs() {
     if [ -n "$VFS_PID" ]; then
+        local mount_point="/tmp/crom_vfs_inference"
         echo -e "${YELLOW}Desmontando VFS CROM...${RESET}"
         kill -9 "$VFS_PID" 2>/dev/null
-        fusermount -u /tmp/crom_llm 2>/dev/null
+        umount -l "$mount_point" 2>/dev/null
+        fusermount -uz "$mount_point" 2>/dev/null
+        sleep 1
         VFS_PID=""
     fi
 }
