@@ -77,8 +77,8 @@ fi
 echo "========================================================"
 echo "🌌 [FASE 3] FUSE CASCADING - Orquestração de 3 Camadas"
 echo "Camada 1: CROM (Sobe o FUSE do File Abstrato em Milisegundos)"
-"$CROM_BIN" mount -i "$OUTPUT_DIR/mc.crom" -m "$CROM_MC_MNT" -c "$CB_DB" &
-"$CROM_BIN" mount -i "$OUTPUT_DIR/tl.crom" -m "$CROM_TL_MNT" -c "$CB_DB" &
+"$CROM_BIN" mount -i "$OUTPUT_DIR/mc.crom" -m "$CROM_MC_MNT" -c "$CB_DB" --cache 1536 &
+"$CROM_BIN" mount -i "$OUTPUT_DIR/tl.crom" -m "$CROM_TL_MNT" -c "$CB_DB" --cache 512 &
 sleep 4 # Tabela de I/O
 
 # Localizando arquivos abstratos reconstruídos

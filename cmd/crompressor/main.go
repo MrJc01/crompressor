@@ -618,6 +618,7 @@ func unpackCmd() *cobra.Command {
 
 func mountCmd() *cobra.Command {
 	var input, mountPoint, codebookPath, encryptionKey string
+	var cacheMB int
 
 	cmd := &cobra.Command{
 		Use:   "mount",
@@ -657,7 +658,7 @@ func mountCmd() *cobra.Command {
 				return fmt.Errorf("mountpoint %s is not a directory", mountPoint)
 			}
 
-			if err := vfs.Mount(input, mountPoint, codebookPath, encryptionKey); err != nil {
+			if err := vfs.Mount(input, mountPoint, codebookPath, encryptionKey, cacheMB); err != nil {
 				return fmt.Errorf("erro na montagem VFS: %v", err)
 			}
 			return nil
@@ -668,6 +669,7 @@ func mountCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&mountPoint, "mountpoint", "m", "", "Diretório de montagem (deve ser vazio)")
 	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Caminho do Codebook (.cromdb)")
 	cmd.Flags().StringVar(&encryptionKey, "encrypt", "", "Chave/Senha para descriptografia")
+	cmd.Flags().IntVar(&cacheMB, "cache", 64, "Hard Limit em Megabytes para o Motor RAM L1/L2 (O(1) VFS)")
 
 	return cmd
 }

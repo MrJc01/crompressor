@@ -21,7 +21,7 @@ type RandomReader struct {
 	blockOffsets []int64 // precalculated absolute offsets in the .crom file
 	entries      []format.ChunkEntry
 	cb           *codebook.Reader
-	cache        *BlockCache
+	memCache     *MemoryCache
 	derivedKey   []byte
 	dataOffset   int64 // Absolute offset where raw passthrough data or the first block starts
 
@@ -32,7 +32,7 @@ type RandomReader struct {
 // File must be kept open by the caller.
 // We expect exactly the data from format.Reader.Read(), minus the compDeltaPool, but because
 // we want stream reading of the pool, we compute offsets here.
-func NewRandomReader(f io.ReaderAt, fileSize int64, header *format.Header, blockTable []uint32, entries []format.ChunkEntry, cb *codebook.Reader, encryptionKey string) (*RandomReader, error) {
+func NewRandomReader(f io.ReaderAt, fileSize int64, header *format.Header, blockTable []uint32, entries []format.ChunkEntry, cb *codebook.Reader, encryptionKey string, maxMB int) (*RandomReader, error) {
 	if header.Version < format.Version2 {
 		return nil, fmt.Errorf("vfs: only Version 2+ formats support Random Access")
 	}
@@ -44,7 +44,7 @@ func NewRandomReader(f io.ReaderAt, fileSize int64, header *format.Header, block
 		blockTable: blockTable,
 		entries:    entries,
 		cb:         cb,
-		cache:      NewBlockCache(4), // 4 * 16MB = 64MB LRU
+		memCache:   NewMemoryCache(maxMB),
 	}
 
 	if header.IsEncrypted {
@@ -122,29 +122,36 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 		entry := rr.entries[chunkIndex]
 		blockID := uint32(chunkIndex / format.ChunksPerBlock)
 
-		// Get uncompressed Delta Pool for this block
-		pool, err := rr.loadBlockPool(blockID)
-		if err != nil {
-			return bytesRead, fmt.Errorf("vfs: read block %d: %w", blockID, err)
-		}
-
-		// Calculate localized block start offset (the global stream offset of the first chunk in this block)
-		blockStartChunkIdx := int64(blockID) * int64(format.ChunksPerBlock)
-		blockStartGlobalOffset := rr.entries[blockStartChunkIdx].DeltaOffset
-
-		entryLocalOffset := entry.DeltaOffset - blockStartGlobalOffset
-
-		endOffset := entryLocalOffset + uint64(entry.DeltaSize)
-		if endOffset > uint64(len(pool)) {
-			return bytesRead, fmt.Errorf("vfs: delta bounds error on chunk %d", chunkIndex)
-		}
-
-		res := pool[entryLocalOffset:endOffset]
-
+		// ===========================
+		// 🚀 L2 CHUNK CACHE BYPASS
+		// ===========================
 		var reconstructedChunk []byte
-		if entry.CodebookID == format.LiteralCodebookID {
-			reconstructedChunk = res
+		
+		if cachedChunk, ok := rr.memCache.Get(int64(chunkIndex)); ok {
+			reconstructedChunk = cachedChunk
 		} else {
+			// Get uncompressed Delta Pool for this block if not in L2
+			pool, err := rr.loadBlockPool(blockID)
+			if err != nil {
+				return bytesRead, fmt.Errorf("vfs: read block %d: %w", blockID, err)
+			}
+	
+			// Calculate localized block start offset (the global stream offset of the first chunk in this block)
+			blockStartChunkIdx := int64(blockID) * int64(format.ChunksPerBlock)
+			blockStartGlobalOffset := rr.entries[blockStartChunkIdx].DeltaOffset
+	
+			entryLocalOffset := entry.DeltaOffset - blockStartGlobalOffset
+	
+			endOffset := entryLocalOffset + uint64(entry.DeltaSize)
+			if endOffset > uint64(len(pool)) {
+				return bytesRead, fmt.Errorf("vfs: delta bounds error on chunk %d", chunkIndex)
+			}
+	
+			res := pool[entryLocalOffset:endOffset]
+	
+			if entry.CodebookID == format.LiteralCodebookID {
+				reconstructedChunk = res
+			} else {
 			isPatch := (entry.CodebookID & format.FlagIsPatch) != 0
 			// Mask out Tier bits and Patch flag (clear upper 4 bits)
 			cleanID := entry.CodebookID & 0x0FFFFFFFFFFFFFFF
@@ -170,10 +177,18 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 				reconstructedChunk = delta.Apply(usablePattern, res)
 			}
 		}
+		} // Closes L2 Cache else
 
 		// Clamp reconstructedChunk to entry.OriginalSize
 		if uint32(len(reconstructedChunk)) > entry.OriginalSize {
 			reconstructedChunk = reconstructedChunk[:entry.OriginalSize]
+		}
+		
+		// L2 CACHE INJECTION
+		if entry.CodebookID != format.LiteralCodebookID {
+			cacheCopy := make([]byte, len(reconstructedChunk))
+			copy(cacheCopy, reconstructedChunk)
+			rr.memCache.Put(int64(chunkIndex), cacheCopy)
 		}
 
 		// How much of this chunk do we need to copy?
@@ -203,7 +218,7 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 
 // loadBlockPool reads an encrypted Zstd frame from disk, or returns it from cache.
 func (rr *RandomReader) loadBlockPool(blockID uint32) ([]byte, error) {
-	if pool, ok := rr.cache.Get(blockID); ok {
+	if pool, ok := rr.memCache.Get(blockID); ok {
 		return pool, nil
 	}
 
@@ -212,7 +227,7 @@ func (rr *RandomReader) loadBlockPool(blockID uint32) ([]byte, error) {
 	defer rr.mu.Unlock()
 
 	// Check cache again inside lock
-	if pool, ok := rr.cache.Get(blockID); ok {
+	if pool, ok := rr.memCache.Get(blockID); ok {
 		return pool, nil
 	}
 
@@ -241,6 +256,6 @@ func (rr *RandomReader) loadBlockPool(blockID uint32) ([]byte, error) {
 		return nil, fmt.Errorf("decompress pool: %w", err)
 	}
 
-	rr.cache.Put(blockID, pool)
+	rr.memCache.Put(blockID, pool)
 	return pool, nil
 }

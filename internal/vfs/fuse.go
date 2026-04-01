@@ -86,7 +86,7 @@ func (f *CromFile) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 
 // Mount mounts a .crom file at the given mountpoint.
 // It blocks until the filesystem is unmounted.
-func Mount(cromFile string, mountPoint string, codebookFile string, encryptionKey string) error {
+func Mount(cromFile string, mountPoint string, codebookFile string, encryptionKey string, maxMB int) error {
 	var cb *codebook.Reader
 	var err error
 
@@ -143,7 +143,7 @@ func Mount(cromFile string, mountPoint string, codebookFile string, encryptionKe
 		return fmt.Errorf("mount: failed to parse format metadata: %w", err)
 	}
 
-	randomReader, err := NewRandomReader(file, fileSize, header, blockTable, entries, cb, encryptionKey)
+	randomReader, err := NewRandomReader(file, fileSize, header, blockTable, entries, cb, encryptionKey, maxMB)
 	if err != nil {
 		return fmt.Errorf("mount: failed to init random reader: %w", err)
 	}
