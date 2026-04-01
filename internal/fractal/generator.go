@@ -26,3 +26,60 @@ func FindGeneratingSeed(targetChunk []byte, maxIterations int) (seed int64, matc
 	}
 	return 0, false // Sem convergência neste nível de profundidade recursiva
 }
+
+// GeneratePolynomial implements a polynomial (ax^2 + bx + c mod 256) sequence generator
+// where a, b, and c are extracted from the 24-bit seed. This is used for O(1) reconstruction during unpack.
+func GeneratePolynomial(seed int64, length int) []byte {
+	a := byte(seed & 0xFF)
+	b := byte((seed >> 8) & 0xFF)
+	c := byte((seed >> 16) & 0xFF)
+	out := make([]byte, length)
+	for i := range out {
+		x := byte(i)
+		out[i] = a*x*x + b*x + c
+	}
+	return out
+}
+
+// FindPolynomial searches the polynomial sequence space (up to 24-bits / 16.7M options).
+// If it finds a match, it returns true and the seed.
+// O(1) storage, reconstructed by evaluating the polynomial.
+func FindPolynomial(targetChunk []byte) (bool, int64) {
+	if len(targetChunk) == 0 {
+		return false, 0
+	}
+	
+	// Algebraic Optimization:
+	// a*x^2 + b*x + c = targetChunk[x]
+	// At x = 0, targetChunk[0] = c
+	c := targetChunk[0]
+	
+	if len(targetChunk) == 1 {
+		seed := int64(c) << 16
+		return true, seed
+	}
+	
+	// At x = 1, targetChunk[1] = a + b + c  =>  targetChunk[1] - c = a + b
+	// We only need to guess 'a' from 0 to 255, and b is fixed: b = targetChunk[1] - c - a
+	for a := 0; a <= 255; a++ {
+		b := int(targetChunk[1]) - int(c) - a
+		bb := byte(b)
+		aa := byte(a)
+		
+		match := true
+		for i := 2; i < len(targetChunk); i++ {
+			x := byte(i)
+			val := aa*x*x + bb*x + c
+			if val != targetChunk[i] {
+				match = false
+				break
+			}
+		}
+		
+		if match {
+			seed := int64(aa) | (int64(bb) << 8) | (int64(c) << 16)
+			return true, seed
+		}
+	}
+	return false, 0
+}

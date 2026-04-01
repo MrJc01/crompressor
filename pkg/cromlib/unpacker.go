@@ -11,6 +11,7 @@ import (
 	"github.com/MrJc01/crompressor/internal/codebook"
 	"github.com/MrJc01/crompressor/internal/crypto"
 	"github.com/MrJc01/crompressor/internal/delta"
+	"github.com/MrJc01/crompressor/internal/fractal"
 	"github.com/MrJc01/crompressor/internal/metrics"
 	"github.com/MrJc01/crompressor/pkg/format"
 )
@@ -200,6 +201,10 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 
 				if targetID == format.LiteralCodebookID {
 					reconstructedChunk = res
+				} else if entry.CodebookIndex == format.FractalCodebookIndex {
+					// V26 Fractal Generative Engine -> O(1) Reconstruction bypasses dict
+					seed := int64(targetID)
+					reconstructedChunk = fractal.GeneratePolynomial(seed, int(entry.OriginalSize))
 				} else {
 					if opts.Fuzziness > 0.0 {
 						spread := int(opts.Fuzziness * 100)
@@ -265,6 +270,9 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 			var reconstructedChunk []byte
 			if targetID == format.LiteralCodebookID {
 				reconstructedChunk = res
+			} else if entry.CodebookIndex == format.FractalCodebookIndex {
+				seed := int64(targetID)
+				reconstructedChunk = fractal.GeneratePolynomial(seed, int(entry.OriginalSize))
 			} else {
 				isPatch := (targetID & format.FlagIsPatch) != 0
 				cleanID := targetID & 0x0FFFFFFFFFFFFFFF

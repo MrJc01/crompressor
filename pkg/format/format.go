@@ -76,6 +76,9 @@ const (
 	// MetamorphicCodebookIndex marks chunks routed via the in-band Micro-Brain (V8)
 	MetamorphicCodebookIndex uint8 = 254
 
+	// FractalCodebookIndex marks chunks routed via the V26 Fractal Generative Engine
+	FractalCodebookIndex uint8 = 253
+
 	// MaxMicroDictSize is the hard security cap for in-band micro-dictionaries.
 	// Prevents OOM attacks from forged V8 headers. (32 MiB)
 	MaxMicroDictSize uint32 = 32 * 1024 * 1024

@@ -11,6 +11,7 @@ import (
 
 	"github.com/MrJc01/crompressor/internal/codebook"
 	"github.com/MrJc01/crompressor/internal/remote"
+	"github.com/MrJc01/crompressor/pkg/cromdb"
 	"github.com/MrJc01/crompressor/pkg/format"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -159,11 +160,22 @@ func Mount(cromFile string, mountPoint string, codebookFile string, encryptionKe
 		baseName = baseName + ".restored.raw"
 	}
 
-	root := &CromRoot{
-		reader:   randomReader,
-		fileName: baseName,
-		fileSize: int64(header.OriginalSize),
-		wal:      walEngine,
+	fsIndex, err := cromdb.NewTreeFS(":memory:")
+	if err != nil {
+		return fmt.Errorf("mount: failed to init TreeFS mapping: %v", err)
+	}
+
+	err = fsIndex.IngestFileHash(baseName, int64(header.OriginalSize), "", 0644)
+	if err != nil {
+		return fmt.Errorf("mount: failed to index file hash: %w", err)
+	}
+
+	root := &TreeInode{
+		inodeID: 1, // ID do diretório Root na B-Tree
+		fsIndex: fsIndex,
+		isDir:   true,
+		reader:  randomReader,
+		wal:     walEngine,
 	}
 
 	server, err := fs.Mount(mountPoint, root, &fs.Options{

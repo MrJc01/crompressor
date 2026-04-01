@@ -1,3 +1,5 @@
+//go:build !wasm
+
 // Package network implements the CROM P2P networking layer using libp2p.
 //
 // The network is sovereign: only peers that share the same Codebook BuildHash

@@ -17,6 +17,7 @@ import (
 	"github.com/MrJc01/crompressor/internal/crypto"
 	"github.com/MrJc01/crompressor/internal/delta"
 	"github.com/MrJc01/crompressor/internal/entropy"
+	"github.com/MrJc01/crompressor/internal/fractal"
 	"github.com/MrJc01/crompressor/internal/merkle"
 	"github.com/MrJc01/crompressor/internal/metrics"
 	"github.com/MrJc01/crompressor/internal/search"
@@ -378,7 +379,24 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 						
 						// EXPERT ROUTING: Entropy-based Passthrough
 						chunkEntropy := entropy.Shannon(chunk.Data)
-						if chunkEntropy > 7.8 || entropy.DetectHeuristicBypass(chunkEntropy, chunk.Data) {
+						if chunkEntropy <= 3.00 {
+							// V26 Fractal Lab: Polinomial Routing O(1)
+							if match, seed := fractal.FindPolynomial(chunk.Data); match {
+								results[i] = processedChunk{
+									res: []byte{}, // No delta needed!
+									sim: 1.0,
+									entry: format.ChunkEntry{
+										CodebookID:    uint64(seed),
+										CodebookIndex: format.FractalCodebookIndex,
+										DeltaSize:     0,
+										OriginalSize:  uint32(chunk.Size),
+									},
+								}
+								continue
+							}
+						}
+
+						if chunkEntropy > 3.00 || entropy.DetectHeuristicBypass(chunkEntropy, chunk.Data) {
 							// Passthrough High-Entropy Chunk (Treat as Literal immediately)
 							results[i] = processedChunk{
 								res: chunk.Data,

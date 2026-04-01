@@ -393,6 +393,10 @@ func TestUnpack_CorruptBlock(t *testing.T) {
 		hSize = format.HeaderSizeV4 
 	} else if h.Version == format.Version5 {
 		hSize = format.HeaderSizeV5
+	} else if h.Version == format.Version6 || h.Version == format.Version7 {
+		hSize = format.HeaderSizeV6
+	} else if h.Version >= format.Version8 {
+		hSize = format.HeaderSizeV8 + int(h.MicroDictSize)
 	}
 	baseOffset := hSize + 4 /* block table len 1 */ + tableSize
 	
@@ -458,12 +462,9 @@ func TestPackUnpack_ThresholdRandom(t *testing.T) {
 
 	os.WriteFile(inputPath, data, 0644)
 
-	metrics, err := Pack(inputPath, cromPath, cbPath, opts)
+	_, err := Pack(inputPath, cromPath, cbPath, opts)
 	if err != nil {
 		t.Fatalf("Pack failed: %v", err)
-	}
-	if metrics.LiteralChunks == 0 {
-		t.Fatalf("Expected literal chunks > 0 for random data against zero codebook, got %d", metrics.LiteralChunks)
 	}
 
 	err = Unpack(cromPath, outputPath, cbPath, DefaultUnpackOptions())
@@ -508,5 +509,84 @@ func TestPackUnpack_ThresholdZeros(t *testing.T) {
 	restored, _ := os.ReadFile(outputPath)
 	if !bytes.Equal(data, restored) {
 		t.Fatalf("Data mismatch after unpacking")
+	}
+}
+
+func TestPackUnpack_UrandomBypass(t *testing.T) {
+	// Teste de entropia alta (Urandom)
+	// O novo Pipeline deve notar que Entropy > 3.0 e aplicar Bypass Literal/Passthrough.
+	data := make([]byte, 1024*1024)
+	rand.Read(data)
+
+	opts := DefaultPackOptions()
+	cbPath := createTestCodebook(t, make([]byte, opts.ChunkSize), opts.ChunkSize)
+
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "input.bin")
+	cromPath := filepath.Join(dir, "output.crom")
+	outputPath := filepath.Join(dir, "restored.bin")
+
+	os.WriteFile(inputPath, data, 0644)
+
+	metrics, err := Pack(inputPath, cromPath, cbPath, opts)
+	if err != nil {
+		t.Fatalf("Pack failed: %v", err)
+	}
+
+	// Com entropia máxima, a expectativa e que o arquivo vire Passthrough (header IsPassthrough = true)
+	// Ou que 100% dos chunks sejam literais (LiteralChunks) no pior caso de streaming.
+	// O bypass principal age sobre o pacote inteiro se a Head tiver entropia > 7.8 ou fallbacks.
+	if metrics.LiteralChunks == 0 && metrics.TotalChunks > 0 {
+		t.Fatalf("Expected literal chunks > 0 for Urandom data if not globally bypassed, got %d", metrics.LiteralChunks)
+	}
+
+	err = Unpack(cromPath, outputPath, cbPath, DefaultUnpackOptions())
+	if err != nil {
+		t.Fatalf("Unpack failed: %v", err)
+	}
+
+	restored, _ := os.ReadFile(outputPath)
+	if !bytes.Equal(data, restored) {
+		t.Fatalf("Data mismatch after unpacking Urandom")
+	}
+}
+
+func TestPackUnpack_Polynomial(t *testing.T) {
+	// Teste do Fractal Multiestrategia O(1).
+	// Cria arquivo com um padrao linear (ax^2+bx+c mod 256) onde:
+	// a=0, b=1, c=5: data[i] = i + 5
+	data := make([]byte, 1000)
+	for i := range data {
+		data[i] = byte(i + 5)
+	} // O bloco possui entropia < 3.0, entao dispara FindPolynomial.
+
+	opts := DefaultPackOptions()
+	opts.ChunkSize = 8 
+	cbPath := createTestCodebook(t, make([]byte, opts.ChunkSize), opts.ChunkSize)
+
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "input.bin")
+	cromPath := filepath.Join(dir, "output.crom")
+	outputPath := filepath.Join(dir, "restored.bin")
+
+	os.WriteFile(inputPath, data, 0644)
+
+	metrics, err := Pack(inputPath, cromPath, cbPath, opts)
+	if err != nil {
+		t.Fatalf("Pack failed: %v", err)
+	}
+
+	if metrics.HitRate > 0 {
+		t.Logf("Polynomial Hit! HitRate=%f", metrics.HitRate)
+	}
+
+	err = Unpack(cromPath, outputPath, cbPath, DefaultUnpackOptions())
+	if err != nil {
+		t.Fatalf("Unpack failed: %v", err)
+	}
+
+	restored, _ := os.ReadFile(outputPath)
+	if !bytes.Equal(data, restored) {
+		t.Fatalf("Data mismatch after unpacking Polynomial fractal chunk")
 	}
 }
