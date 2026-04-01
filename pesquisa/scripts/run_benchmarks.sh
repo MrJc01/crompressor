@@ -8,11 +8,11 @@ set -e
 # Configurações de Caminho
 BIN="../../bin/crompressor"
 DATASETS="../datasets"
-LOGS_DIR="../01-logs_redundancia"
-DELTA_DIR="../02-delta_sync_cdc"
-VFS_DIR="../03-vfs_mount_perf"
-P2P_DIR="../04-p2p_soberania"
-TCO_DIR="../05-tco_storage_frio"
+LOGS_DIR="../core_engine/01-logs_redundancia"
+DELTA_DIR="../core_engine/02-delta_sync_cdc"
+VFS_DIR="../core_engine/03-vfs_mount_perf"
+P2P_DIR="../core_engine/04-p2p_soberania"
+TCO_DIR="../core_engine/05-tco_storage_frio"
 
 # Datasets
 LOGS_JSON="$DATASETS/logs_200k.json"

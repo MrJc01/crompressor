@@ -35,8 +35,8 @@ func GeneratePolynomial(seed int64, length int) []byte {
 	c := byte((seed >> 16) & 0xFF)
 	out := make([]byte, length)
 	for i := range out {
-		x := byte(i)
-		out[i] = a*x*x + b*x + c
+		x := uint64(i)
+		out[i] = byte(uint64(a)*x*x + uint64(b)*x + uint64(c))
 	}
 	return out
 }

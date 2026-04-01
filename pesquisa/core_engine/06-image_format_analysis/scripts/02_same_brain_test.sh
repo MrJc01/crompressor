@@ -75,7 +75,7 @@ for fmt in "${FORMATS[@]}"; do
                 log_ok "  $BASENAME: ratio=${RATIO}% saving=${SAVING}% | ${ELAPSED}ms | SHA-256 ✅ PASS"
                 ;;
             UNPACK_FAIL)
-                log_warn "  $BASENAME: ratio=${RATIO}% saving=${SAVING}% | ${ELAPSED}ms | ⚠️ UNPACK_FAIL (delta pool overflow)"
+                log_warn "  $BASENAME: ratio=${RATIO}% saving=${SAVING}% | ${ELAPSED}ms | ⚠️ UNPACK_FAIL ($ERR_MSG)"
                 ;;
             *)
                 log_err "  $BASENAME: ratio=${RATIO}% | VERIFY $VERIFY_RESULT"

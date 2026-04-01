@@ -171,14 +171,15 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 
 			blockEndOffset := currentGlobalOffset + uint64(len(uncompressedBlock))
 			
-			// Process all chunk entries that fit perfectly inside this uncompressed block
-			for entryIdx < len(entries) {
+			// Process the exact constant number of chunks that belong to this block
+			chunksInThisBlock := format.ChunksPerBlock
+			if i == len(blockTable)-1 {
+				// Special case for last block which might be smaller
+				chunksInThisBlock = int(header.ChunkCount) - (i * format.ChunksPerBlock)
+			}
+			
+			for count := 0; count < chunksInThisBlock && entryIdx < len(entries); count++ {
 				entry := entries[entryIdx]
-				
-				// Reached an entry that lives in the next block
-				if entry.DeltaOffset >= blockEndOffset {
-					break
-				}
 				
 				localOffset := entry.DeltaOffset - currentGlobalOffset
 				endLocal := localOffset + uint64(entry.DeltaSize)
@@ -231,11 +232,8 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 					if isPatch {
 						// Apply Edit Script
 						reconstructedChunk, err = delta.ApplyPatch(usablePattern, res)
-						if err != nil && opts.Strict {
-							return fmt.Errorf("unpack: failed to apply patch: %w", err)
-						} else if err != nil {
-							// fallback
-							reconstructedChunk = res
+						if err != nil {
+							return fmt.Errorf("unpack: failed to apply patch on chunk %d (block %d): %w", entryIdx, i, err)
 						}
 					} else {
 						// Apply XOR
@@ -283,9 +281,14 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 				if uint32(len(usablePattern)) > entry.OriginalSize { usablePattern = usablePattern[:entry.OriginalSize] }
 				
 				if isPatch {
-					reconstructedChunk, _ = delta.ApplyPatch(usablePattern, res)
+					reconstructedChunk, err = delta.ApplyPatch(usablePattern, res)
+					if err != nil {
+						return fmt.Errorf("unpack legacy: failed to apply patch: %w", err)
+					}
 				} else {
-					if uint32(len(res)) > entry.OriginalSize { res = res[:entry.OriginalSize] }
+					if uint32(len(res)) > entry.OriginalSize {
+						res = res[:entry.OriginalSize]
+					}
 					reconstructedChunk = delta.Apply(usablePattern, res)
 				}
 			}
