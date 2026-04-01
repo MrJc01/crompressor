@@ -30,17 +30,44 @@ O salto das versões anteriores para a **Singularidade** engloba a estabilizaç�
 | ⚡ **Sincronicidade de L1 RAM** | A malha P2P GossipSub unifica as máquinas a ponto de usar a RAM de nós vizinhos como cache natural (Swarm). |
 | 🔬 **Soberania Isolada** | VFS Kill-Switch integrado que dissolve o hiper-disco FUSE automaticamente no momento em que a assinatura soberana for violada. |
 
+## 🛠️ Compilação e Instalação
+
+O **Crompressor** é escrito em Go (v1.25+). Você pode compilar o projeto diretamente utilizando o `Makefile` incluído no repositório.
+
+### Pré-requisitos
+- **Go 1.25.7** ou superior instalado e configurado no seu `$PATH`.
+- **Make** instalado no sistema.
+
+### Construindo o Binário
+Para compilar o código-fonte e gerar o executável:
+
+```bash
+# Clone o repositório (caso ainda não tenha feito)
+git clone https://github.com/MrJc01/crompressor
+cd crompressor
+
+# Compilar o projeto
+make build
+```
+
+O binário executável será gerado em: `./bin/crompressor`.
+
+### Outros Comandos de Build
+- `make test`: Executa os testes de unidade com detecção de concorrência (`-race`).
+- `make clean`: Remove o diretório `bin/` e arquivos temporários.
+- `make bench`: Executa os benchmarks de performance.
+
 ## Quick Start (V23)
 
 ```bash
 # Compilar Realidade: Empacotando Entropia (Textos, Modelos AI, Genoma)
-crompressor pack -i ./matriz_hadron_collider.safetensors -o ./singularity.crom
+./bin/crompressor pack -i ./matriz_hadron_collider.safetensors -o ./singularity.crom
 
 # Decompilar para a Físicalidade Bit-a-Bit
-crompressor unpack -i ./singularity.crom -o ./restored.safetensors
+./bin/crompressor unpack -i ./singularity.crom -o ./restored.safetensors
 
 # Operar em Malha-Colmeia V23 (Kademlia + Bitswap L1)
-crompressor daemon --allow-hive-mind --quantum-secure
+./bin/crompressor daemon --allow-hive-mind --quantum-secure
 ```
 
 ## Documentação Fundamental
