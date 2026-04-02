@@ -208,9 +208,13 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 		}
 		if chunkOffset+toCopy > int64(len(reconstructedChunk)) {
 			toCopy = int64(len(reconstructedChunk)) - chunkOffset
-			if toCopy < 0 {
-				toCopy = 0
-			}
+		}
+
+		if toCopy <= 0 {
+			// Fail-safe: Prevent infinite CPU spin if reconstructedChunk is shorter than expected
+			// and we are requested to read past its end but within entry.OriginalSize.
+			fmt.Fprintf(os.Stderr, "[VFS-DETECTOR] Infinite loop prevented: chunk=%d offset=%d len=%d origSize=%d\n", chunkIndex, chunkOffset, len(reconstructedChunk), entry.OriginalSize)
+			return bytesRead, fmt.Errorf("vfs: data corruption or short read on chunk %d", chunkIndex)
 		}
 
 		copy(dest[bytesRead:bytesRead+int(toCopy)], reconstructedChunk[chunkOffset:chunkOffset+toCopy])
