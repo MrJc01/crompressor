@@ -87,3 +87,12 @@ dummy*
 
 # ═══ Temporários de compilação WASM/cross ═══
 /tmp/crom_*
+
+# ═══ VFS CASCADING Runtime ═══
+vfs_upper/
+vfs_work/
+merged/
+mnt_crom/
+mnt_ro/
+mnt/
+_source/

@@ -27,14 +27,27 @@ type TreeFS struct {
 }
 
 // NewTreeFS inicializa o repositório SQLite temporário de metadados em RAM ou Disco.
+// ATENÇÃO: Para `:memory:`, usamos `file::memory:?cache=shared` para que TODAS
+// as conexões do pool database/sql compartilhem o MESMO banco em memória.
+// Sem isso, cada conexão do pool cria um banco separado → `no such table: inodes`.
 func NewTreeFS(dsn string) (*TreeFS, error) {
-	if dsn == "" {
-		dsn = ":memory:"
+	if dsn == "" || dsn == ":memory:" {
+		// cache=shared garante que múltiplas conexões do pool acessem o mesmo DB in-memory.
+		dsn = "file::memory:?cache=shared"
 	}
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
+
+	// Limita a 1 conexão para evitar race conditions no SQLite (single-writer).
+	// Para :memory: com cache=shared, isso é redundante mas seguro.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+
+	// Pragmas de performance e segurança
+	_, _ = db.Exec("PRAGMA journal_mode=WAL")
+	_, _ = db.Exec("PRAGMA busy_timeout=5000")
 
 	fs := &TreeFS{db: db}
 	if err := fs.initSchema(); err != nil {

@@ -37,7 +37,7 @@ func (v *DefaultVault) Mount(ctx context.Context, cromFile string, opts VaultOpt
 
 	// Mount blocks — run in goroutine for GUI responsiveness
 	go func() {
-		err := vfs.Mount(cromFile, opts.MountPoint, opts.CodebookPath, opts.EncryptionKey)
+		err := vfs.Mount(cromFile, opts.MountPoint, opts.CodebookPath, opts.EncryptionKey, 256)
 		if v.eventBus != nil {
 			v.eventBus.Emit(EventVFSUnmounted, map[string]interface{}{
 				"file":  cromFile,

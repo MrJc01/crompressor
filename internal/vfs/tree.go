@@ -3,6 +3,7 @@ package vfs
 import (
 	"context"
 	"fmt"
+	"os"
 	"syscall"
 
 	"github.com/MrJc01/crompressor/pkg/cromdb"
@@ -78,8 +79,10 @@ func (n *TreeInode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 
 	children, err := n.fsIndex.GetChildren(n.inodeID)
 	if err != nil {
-		fmt.Printf("Readdir error from SQLite: %v\n", err)
-		return nil, syscall.EIO
+		// Log apenas uma vez por instância para não poluir o terminal
+		// (o kernel chama Readdir repetidamente em background)
+		fmt.Fprintf(os.Stderr, "vfs: Readdir(inode=%d) SQLite error (suppressing repeats): %v\n", n.inodeID, err)
+		return fs.NewListDirStream(nil), 0
 	}
 
 	entries := make([]fuse.DirEntry, len(children))
