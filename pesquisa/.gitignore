@@ -1,11 +1,14 @@
-# 🧱 Crompressor: Pesquisa - GitIgnore
-# Ignore generated artifacts and data directories universally within research
+# ═══════════════════════════════════════════════════════
+# 🧱 Crompressor: Pesquisa - GitIgnore (V26)
+# ═══════════════════════════════════════════════════════
+
+# ─── Diretórios de artefatos gerados (universais) ───
 results/
 brains/
 datasets/
 verify/
 
-# Ignore specific large file extensions and temporary files
+# ─── Artefatos binários e temporários ───
 *.crom
 *.cromdb
 *.sqsh
@@ -14,11 +17,32 @@ verify/
 *.log
 *.tmp
 *.dat
+*.zst
 dummy*
+*_output.bin
 
-# Never ignore gitkeeps (to preserve empty specific directories if needed)
+# ─── Preservar .gitkeep em diretórios vazios ───
 !.gitkeep
 
-# Specific research exclusions
+# ─── Sempre rastrear scripts, código e docs ───
+!**/*.sh
+!**/*.go
+!**/*.md
+!**/*.html
+!**/*.js
+!**/utils.sh
+
+# ─── Pesquisa: arquivos raiz essenciais ───
+!run_all_audits.sh
+!setup_pesquisa.sh
+!index.md
+!Manifesto.md
+!web_audit_lab.html
+
+# ─── LLM: ignorar binários e modelos pesados ───
 ia_llm/102-native_llm_humble_pc/bin/
 ia_llm/102-native_llm_humble_pc/models/
+
+# ─── Scripts legados na raiz de /scripts ───
+!scripts/run_benchmarks.sh
+scripts/-

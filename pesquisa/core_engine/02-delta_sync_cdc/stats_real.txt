@@ -1,0 +1,22 @@
+╔═══════════════════════════════════════════╗
+║          CROM INFO (Analisador)           ║
+╠═══════════════════════════════════════════╣
+║  Input:    ../core_engine/02-delta_sync_cdc/v1.crom ║
+╚═══════════════════════════════════════════╝
+
+═══ Header ═══
+  Version:       7
+  Encrypted:     false
+  Original Size: 5727877 bytes
+  Original Hash: e3005811a66d7e4d25258a5afc15fbee
+  Chunk Count:   44750
+  File Size:     1207432 bytes
+
+═══ Entropia ═══
+  Shannon Entropy (Delta Pool): 6.5821 bits/byte
+  Max Possible:                 8.0000 bits/byte
+  Randomness:                   82.28%
+
+═══ Distribuição de CodebookIDs (Top-10) ═══
+  #01  CodebookID: 18446744073709551615  Count: 44750   (100.00%)
+  ... 1 CodebookIDs únicos no total
