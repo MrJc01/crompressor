@@ -47,6 +47,14 @@ O executável será gerado em `./bin/crompressor`.
 
 ## Início Rápido
 
+### Entendendo a Arquitetura (Os Arquivos)
+
+Antes de rodar os comandos, é crucial entender o que cada arquivo representa no ecossistema do Crompressor:
+
+- `data.bin` ou `./meus-dados/`: Seus **dados originais** (JSON, logs, código, etc.).
+- `codebook.cromdb`: O **Dicionário Semântico (Cérebro)**. Gerado durante a etapa de `train`, ele guarda os padrões extraídos dos seus dados. Sem ele, é impossível descompactar o arquivo. Pode ser reutilizado em milhares de arquivos semelhantes.
+- `data.crom`: O arquivo **Comprimido Final**. Ele contém apenas as "coordenadas" (deltas) que apontam para os padrões guardados no Codebook.
+
 ### Uso da CLI
 
 ```bash

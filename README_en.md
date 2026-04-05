@@ -47,6 +47,14 @@ The binary will be placed at `./bin/crompressor`.
 
 ## Quick Start
 
+### Understanding the Architecture (File Extensions)
+
+Before running the commands, it's crucial to understand what each file represents in the Crompressor ecosystem:
+
+- `data.bin` or `./my-data/`: Your **original, raw data** (JSON, logs, code, etc.).
+- `codebook.cromdb`: The **Semantic Dictionary (The Brain)**. Generated during the `train` step, it stores the patterns extracted from your data. Without it, you cannot decompress the file later. It can be reused across thousands of similar files.
+- `data.crom`: The final **Super-Compressed File**. It only contains the "coordinates" (deltas) pointing to the patterns stored inside the Codebook.
+
 ### CLI Usage
 
 ```bash
