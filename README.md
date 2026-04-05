@@ -143,6 +143,36 @@ Detailed technical documentation is available in the [`docs/`](docs/) directory:
 9. [Benchmarks & Metrics](docs/09-BENCHMARKS_E_METRICAS.md)
 10. [MVP Strategy](docs/10-ESTRATEGIA_MVP.md)
 
+## Benchmark Results
+
+Real benchmark results from the automated test suite (`go run ./benchmark/` on the [`benchmark`](https://github.com/MrJc01/crompressor/tree/benchmark) branch):
+
+| Dataset | Type | Original | Packed | Ratio | Pack Speed | Unpack Speed | Integrity |
+|---|---|---|---|---|---|---|---|
+| go_source | Repetitive Go code | 10.0 MB | 2.2 MB | **4.62x** | 14.0 MB/s | 32.9 MB/s | ✅ |
+| json_api | Structured JSON | 10.0 MB | 3.2 MB | **3.14x** | 7.1 MB/s | 30.4 MB/s | ✅ |
+| server_logs | Server log lines | 10.0 MB | 3.4 MB | **2.91x** | 5.1 MB/s | 26.3 MB/s | ✅ |
+| mixed_config | YAML/TOML configs | 5.0 MB | 1.3 MB | **3.87x** | 10.8 MB/s | 37.6 MB/s | ✅ |
+| binary_headers | ELF headers + padding | 10.0 MB | 2.4 MB | **4.25x** | 4.5 MB/s | 35.2 MB/s | ✅ |
+| high_entropy | Pseudorandom (worst case) | 10.0 MB | 10.0 MB | 1.00x | 81.0 MB/s | 85.4 MB/s | ✅ |
+| real_go_repo | This repo's Go source | 443 KB | 196 KB | **2.26x** | 3.6 MB/s | 23.9 MB/s | ✅ |
+
+> **Lossless guarantee:** All datasets pass SHA-256 roundtrip verification. High-entropy data is automatically detected and passed through without expansion.
+
+To run the full benchmark suite yourself:
+```bash
+git checkout benchmark
+go run ./benchmark/
+```
+
+## Branches
+
+| Branch | Purpose | Command |
+|---|---|---|
+| [`main`](https://github.com/MrJc01/crompressor) | Public library — clean, documented, `go get`-able | `git checkout main` |
+| [`dev`](https://github.com/MrJc01/crompressor/tree/dev) | Research lab — CROM-IA, SRE audits, experiments, UI | `git checkout dev` |
+| [`benchmark`](https://github.com/MrJc01/crompressor/tree/benchmark) | Benchmark suite — real performance data | `git checkout benchmark` |
+
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request.
