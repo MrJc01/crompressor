@@ -145,25 +145,51 @@ Detailed technical documentation is available in the [`docs/`](docs/) directory:
 
 ## Benchmark Results
 
-Real benchmark results from the automated test suite (`go run ./benchmark/` on the [`benchmark`](https://github.com/MrJc01/crompressor/tree/benchmark) branch):
+Real results from the automated test suite ([`benchmark`](https://github.com/MrJc01/crompressor/tree/benchmark) branch). Run: `git checkout benchmark && go run ./benchmark/`
 
-| Dataset | Type | Original | Packed | Ratio | Pack Speed | Unpack Speed | Integrity |
+### Compression Ratio
+
+| Dataset | Type | Original | Packed | Ratio | Pack | Unpack | SHA-256 |
 |---|---|---|---|---|---|---|---|
-| go_source | Repetitive Go code | 10.0 MB | 2.2 MB | **4.62x** | 14.0 MB/s | 32.9 MB/s | ✅ |
-| json_api | Structured JSON | 10.0 MB | 3.2 MB | **3.14x** | 7.1 MB/s | 30.4 MB/s | ✅ |
-| server_logs | Server log lines | 10.0 MB | 3.4 MB | **2.91x** | 5.1 MB/s | 26.3 MB/s | ✅ |
-| mixed_config | YAML/TOML configs | 5.0 MB | 1.3 MB | **3.87x** | 10.8 MB/s | 37.6 MB/s | ✅ |
-| binary_headers | ELF headers + padding | 10.0 MB | 2.4 MB | **4.25x** | 4.5 MB/s | 35.2 MB/s | ✅ |
-| high_entropy | Pseudorandom (worst case) | 10.0 MB | 10.0 MB | 1.00x | 81.0 MB/s | 85.4 MB/s | ✅ |
-| real_go_repo | This repo's Go source | 443 KB | 196 KB | **2.26x** | 3.6 MB/s | 23.9 MB/s | ✅ |
+| go_source | Repetitive Go code | 10 MB | 2.2 MB | **4.62x** | 7.3 MB/s | 12.8 MB/s | ✅ |
+| json_api | Structured JSON | 10 MB | 3.2 MB | **3.14x** | 3.2 MB/s | 13.7 MB/s | ✅ |
+| binary_headers | ELF headers + padding | 10 MB | 2.4 MB | **4.25x** | 4.3 MB/s | 31.1 MB/s | ✅ |
+| mixed_config | YAML/TOML configs | 5 MB | 1.3 MB | **3.87x** | 6.9 MB/s | 16.9 MB/s | ✅ |
+| server_logs | Server log lines | 10 MB | 3.4 MB | **2.91x** | 3.9 MB/s | 16.8 MB/s | ✅ |
+| high_entropy | Pseudorandom (worst) | 10 MB | 10 MB | 1.00x | 64 MB/s | 57 MB/s | ✅ |
 
-> **Lossless guarantee:** All datasets pass SHA-256 roundtrip verification. High-entropy data is automatically detected and passed through without expansion.
+### Scaling (1MB → 500MB)
 
-To run the full benchmark suite yourself:
-```bash
-git checkout benchmark
-go run ./benchmark/
-```
+| Size | Ratio | Pack Speed | Unpack Speed |
+|---|---|---|---|
+| 1 MB | **2.81x** | 3.0 MB/s | 13.4 MB/s |
+| 10 MB | **2.91x** | 6.6 MB/s | 33.3 MB/s |
+| 100 MB | **2.92x** | 9.0 MB/s | 37.2 MB/s |
+| 500 MB | **2.93x** | 7.6 MB/s | 31.9 MB/s |
+
+### Chunker Comparison (best per dataset)
+
+| Dataset | Fixed-128B | FastCDC | ACAC |
+|---|---|---|---|
+| json_api | 3.13x | **4.10x** 🏆 | 1.74x |
+| server_logs | 2.88x | **3.66x** 🏆 | 2.50x |
+| go_source | **4.60x** 🏆 | 4.30x | 1.86x |
+
+### VFS FUSE Mount
+
+| Metric | Value |
+|---|---|
+| VFS Sequential Read | **84.5 MB/s** |
+| Direct Disk Read | 319.4 MB/s |
+| First-Byte Latency | 197ms |
+| Integrity via VFS | ✅ SHA-256 MATCH |
+
+### Docker FUSE Cascade
+
+✅ **SUCCESS** — Docker built and ran a container from a 3-layer FUSE cascade:
+`.crom` → CROM VFS Mount → OverlayFS → `docker build` → `docker run`
+
+> **Lossless guarantee:** All tests pass SHA-256 roundtrip verification. High-entropy data is automatically detected and passed through without expansion.
 
 ## Branches
 
