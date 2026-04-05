@@ -191,6 +191,40 @@ Real results from the automated test suite ([`benchmark`](https://github.com/MrJ
 
 > **Lossless guarantee:** All tests pass SHA-256 roundtrip verification. High-entropy data is automatically detected and passed through without expansion.
 
+### 🔄 Comparison vs Standard Tools
+
+Crompressor is a semantic, dictionary-based compiler. It is not designed to beat `gzip` or `zstd` in pure byte-compression of random files, but rather to enable zero-copy VFS streaming of highly structured data.
+
+| Dataset | Crompressor | gzip -9 | zstd -19 | Best Raw Ratio |
+|---|---|---|---|---|
+| go_source | 4.62x | 38.26x | 69.09x | zstd |
+| json_api | 3.14x | 8.09x | 9.96x | zstd |
+| binary_headers | 4.25x | 24.70x | 29.04x | zstd |
+| server_logs | 2.91x | 6.48x | 8.45x | zstd |
+| high_entropy | 1.00x (Bypass) | 1.00x | 1.00x | 🏆 CROM |
+
+*Note: `gzip` and `zstd` achieve higher raw ratios by using generalized entropy coding (LZ77, FSE) in C. Crompressor sacrifices raw ratio to allow O(1) random access reads (mounting via FUSE) without loading the entire archive into memory.*
+
+## 🎯 Use Cases
+
+### ✅ When Crompressor Excels
+- **Database / Logs VFS:** When you want a PostgreSQL database or JSON server logs compressed, but actively readable in real-time.
+- **Out-of-Core Execution:** Running heavy software (like Docker layers, VM images, or Minecraft) straight out of a compressed volume over FUSE.
+- **P2P Syncing:** The Codebook-Delta architecture allows massive semantic deduplication across distributed network nodes (Mesh/GossipSub).
+- **Structured Data:** JSON APIs, XML, YAML, CSV, and repetitive Go/Python code repositories.
+
+### ❌ When NOT to use Crompressor
+- **Pre-compressed Data:** Images (JPG, PNG), Videos (MP4), or Archives (.zip, .tar.gz). The entropy shield will automatically detect these and pass them through to save CPU, meaning no compression will occur.
+- **Cold Storage Archiving:** If you just want to zip a folder for offline backup and don't care about real-time VFS reading, standard `zstd -19` or `7z` will give you astronomically better file sizes.
+- **Small Generic Files:** If you are compressing 50KB of random text, zipping it is better than training a semantic model for it.
+
+## ⚙️ How it Works
+
+1. **Train:** Creates a semantic dictionary (Codebook) from a representative dataset using Neural BPE or LSH.
+2. **Pack:** Splits your data into context-aware chunks (via FastCDC or Semantic Delimiters), finds the closest codebook pattern via Cosine Similarity, and stores only the XOR delta.
+3. **Mount:** The `.crom` file and `.cromdb` codebook are mounted directly into the Linux Kernel via FUSE.
+4. **Unpack (On-the-fly):** When Docker or an App requests a byte, the motor reconstructs the exact original chunk in microseconds without unpacking the rest of the 10GB file.
+
 ## Branches
 
 | Branch | Purpose | Command |
