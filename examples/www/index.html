@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crompressor WASM — Edge Compression Demo</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0e17;
+            color: #e0e6f0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: linear-gradient(135deg, #111827 0%, #1a1f36 100%);
+            border: 1px solid rgba(99,102,241,0.3);
+            border-radius: 16px;
+            padding: 48px;
+            max-width: 640px;
+            width: 90%;
+            box-shadow: 0 0 60px rgba(99,102,241,0.08);
+        }
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #6366f1, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+        .subtitle { color: #94a3b8; font-size: 0.9rem; margin-bottom: 32px; }
+        .drop-zone {
+            border: 2px dashed rgba(99,102,241,0.4);
+            border-radius: 12px;
+            padding: 48px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 24px;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: #6366f1;
+            background: rgba(99,102,241,0.05);
+        }
+        .drop-zone p { font-size: 1rem; color: #94a3b8; }
+        .drop-zone .icon { font-size: 2.5rem; margin-bottom: 12px; }
+        #results {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 20px;
+            display: none;
+            font-family: monospace;
+            font-size: 0.85rem;
+            line-height: 1.8;
+        }
+        #results .label { color: #6366f1; }
+        #results .val { color: #34d399; font-weight: 600; }
+        .status {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+        .status.ready { color: #34d399; }
+        .status.error { color: #f87171; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ Crompressor WASM</h1>
+        <p class="subtitle">Edge Compression — Compress data directly in the browser.</p>
+
+        <div class="drop-zone" id="dropZone">
+            <div class="icon">📄</div>
+            <p>Drop a file here or click to select</p>
+        </div>
+
+        <div id="results"></div>
+
+        <p class="status" id="status">Loading WASM module...</p>
+    </div>
+
+    <input type="file" id="fileInput" style="display:none">
+
+    <script src="wasm_exec.js"></script>
+    <script>
+        const go = new Go();
+        let wasmReady = false;
+
+        WebAssembly.instantiateStreaming(fetch("crompressor.wasm"), go.importObject)
+            .then(result => {
+                go.run(result.instance);
+                wasmReady = true;
+                const status = document.getElementById("status");
+                status.textContent = "✅ " + CromVersion() + " — Ready";
+                status.className = "status ready";
+            })
+            .catch(err => {
+                const status = document.getElementById("status");
+                status.textContent = "❌ Failed to load WASM: " + err;
+                status.className = "status error";
+            });
+
+        const dropZone = document.getElementById("dropZone");
+        const fileInput = document.getElementById("fileInput");
+
+        dropZone.addEventListener("click", () => fileInput.click());
+        dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
+        dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+        dropZone.addEventListener("drop", e => {
+            e.preventDefault();
+            dropZone.classList.remove("dragover");
+            if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener("change", e => {
+            if (e.target.files.length) processFile(e.target.files[0]);
+        });
+
+        async function processFile(file) {
+            if (!wasmReady) { alert("WASM module not loaded yet."); return; }
+
+            const status = document.getElementById("status");
+            status.textContent = "⏳ Compressing " + file.name + "...";
+            status.className = "status";
+
+            const buffer = await file.arrayBuffer();
+            const inputData = new Uint8Array(buffer);
+
+            // For demo purposes, use a dummy codebook (the real API needs a .cromdb)
+            // In production, you'd load a real codebook from IndexedDB or fetch
+            const dummyCodebook = new Uint8Array(0);
+
+            const result = CromPack(inputData, dummyCodebook);
+
+            const resultsDiv = document.getElementById("results");
+            if (typeof result === "string") {
+                resultsDiv.innerHTML = `<span class="label">Error:</span> <span style="color:#f87171">${result}</span>`;
+                resultsDiv.style.display = "block";
+                status.textContent = "❌ Compression failed";
+                status.className = "status error";
+            } else {
+                resultsDiv.innerHTML = `
+                    <span class="label">Original Size:</span>  <span class="val">${result.originalSize.toLocaleString()} bytes</span><br>
+                    <span class="label">Compressed:</span>     <span class="val">${result.compressedSize.toLocaleString()} bytes</span><br>
+                    <span class="label">Chunks:</span>         <span class="val">${result.chunks}</span><br>
+                    <span class="label">Ratio:</span>          <span class="val">${result.ratio}</span>
+                `;
+                resultsDiv.style.display = "block";
+                status.textContent = "✅ Done! Compressed " + file.name;
+                status.className = "status ready";
+            }
+        }
+    </script>
+</body>
+</html>

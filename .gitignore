@@ -1,0 +1,36 @@
+# ═══ Binários ═══
+bin/
+*.exe
+.go-tmp/
+
+# ═══ Test Artifacts ═══
+testdata/mini.cromdb
+testdata/sample_*.bin
+/tmp/
+
+# ═══ IDE ═══
+.idea/
+.vscode/
+*.swp
+*.swo
+*.code-workspace
+.gemini/
+
+# ═══ OS ═══
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ═══ Go ═══
+vendor/
+*.test
+coverage.out
+
+# ═══ CROM Runtime Artifacts ═══
+*.crom
+*.cromdb
+*.sqsh
+!testdata/*.cromdb
+
+# ═══ Logs ═══
+*.log
