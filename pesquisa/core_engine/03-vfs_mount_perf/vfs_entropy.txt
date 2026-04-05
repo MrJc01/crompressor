@@ -1,7 +1,7 @@
 ╔═══════════════════════════════════════════╗
 ║          CROM INFO (Analisador)           ║
 ╠═══════════════════════════════════════════╣
-║  Input:    ../core_engine/01-logs_redundancia/logs.crom ║
+║  Input:    ../01-logs_redundancia/logs.crom ║
 ╚═══════════════════════════════════════════╝
 
 ═══ Header ═══
@@ -10,13 +10,22 @@
   Original Size: 26200000 bytes
   Original Hash: 1d6b14aa504829924d1c9ba9e26df6a1
   Chunk Count:   204688
-  File Size:     5120849 bytes
+  File Size:     5145028 bytes
 
 ═══ Entropia ═══
-  Shannon Entropy (Delta Pool): 5.4828 bits/byte
+  Shannon Entropy (Delta Pool): 7.7840 bits/byte
   Max Possible:                 8.0000 bits/byte
-  Randomness:                   68.53%
+  Randomness:                   97.30%
 
 ═══ Distribuição de CodebookIDs (Top-10) ═══
-  #01  CodebookID: 18446744073709551615  Count: 204688  (100.00%)
-  ... 1 CodebookIDs únicos no total
+  #01  CodebookID: 350         Count: 36246   (17.71%)
+  #02  CodebookID: 258         Count: 10937   (5.34%)
+  #03  CodebookID: 257         Count: 7812    (3.82%)
+  #04  CodebookID: 263         Count: 6874    (3.36%)
+  #05  CodebookID: 275         Count: 5106    (2.49%)
+  #06  CodebookID: 270         Count: 5000    (2.44%)
+  #07  CodebookID: 356         Count: 4689    (2.29%)
+  #08  CodebookID: 268         Count: 4272    (2.09%)
+  #09  CodebookID: 331         Count: 4061    (1.98%)
+  #10  CodebookID: 261         Count: 3438    (1.68%)
+  ... 80 CodebookIDs únicos no total

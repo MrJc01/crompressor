@@ -70,11 +70,25 @@ O binário executável será gerado em: `./bin/crompressor`.
 ./bin/crompressor daemon --allow-hive-mind --quantum-secure
 ```
 
+## 🔬 O Laboratório de Pesquisa (P&D)
+
+Esta branch (`dev`) funciona como o nosso laboratório central de experimentação. Aqui você encontrará os rastros das arquiteturas que moldaram o projeto, desde a V7 até a V23:
+
+- [**Diretório de Pesquisa (`pesquisa/`)**](pesquisa/index.md): Contém manifestos, roadmaps históricos, roteiros de IA/LLM e auditorias de soberania.
+- [**Casos de Uso Reais (`trabalho/`)**](trabalho/README.md): Demonstrações práticas do CROM operando em Docker, Minecraft, Banco de Dados Postgres e Orquestração de LLMs.
+- [**Histórico de Arquitetura**: 
+  - [ARCHITECTURE_V21.md](ARCHITECTURE_V21.md)
+  - [ROADMAP_V10.md](ROADMAP_V10.md)
+  - [PLAN_V14.md](PLAN_V14.md)
+
+> [!TIP]
+> Para a versão estável, documentada e pronta para produção, utilize sempre a branch **[`main`](https://github.com/MrJc01/crompressor)**.
+
 ## Documentação Fundamental
 
 | Documento | Descrição |
 |---|---|
-| [MANIFESTO CROM](MANIFESTO_CROM.md) | A nova "Alvorada da Extração Semântica" e o Fim da Compressão Tradicional. |
+| [MANIFESTO CROM](pesquisa/Manifesto.md) | A nova "Alvorada da Extração Semântica" e o Fim da Compressão Tradicional. |
 | [ARCHITECTURE_V23](ARCHITECTURE_V23.md) | Motor Cosenoidal HNSW, B-Tree, Genoma, Quantum Vectors e Proteções Anti-Quânticas. |
 | [RELATÓRIO AUDITORIA (70 Baterias)](relatorio_auditoria.md) | A validação massiva O(1) confirmando a arquitetura em SRE de missões críticas. |
 
