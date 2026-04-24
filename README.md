@@ -60,8 +60,11 @@ O binário executável será gerado em: `./bin/crompressor`.
 ## Quick Start (V23)
 
 ```bash
-# Compilar Realidade: Empacotando Entropia (Textos, Modelos AI, Genoma)
-./bin/crompressor pack -i ./matriz_hadron_collider.safetensors -o ./singularity.crom
+# Compilar Realidade: Modo Vault (Default, Lossless E2E)
+./bin/crompressor pack --mode vault -i ./matriz_hadron_collider.safetensors -o ./singularity.crom
+
+# Compilar Realidade: Modo Edge (Lossy, Extrema Compressão)
+./bin/crompressor pack --mode edge -i ./llm_weights.safetensors -o ./tiny_model.crom
 
 # Decompilar para a Físicalidade Bit-a-Bit
 ./bin/crompressor unpack -i ./singularity.crom -o ./restored.safetensors

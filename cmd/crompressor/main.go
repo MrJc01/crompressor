@@ -193,6 +193,7 @@ func packCmd() *cobra.Command {
 	var multiPass bool
 	var streamMode bool
 	var brainDir string
+	var packMode string
 
 	cmd := &cobra.Command{
 		Use:   "pack",
@@ -264,6 +265,7 @@ func packCmd() *cobra.Command {
 			}
 			opts.UseCDC = useCDC
 			opts.MultiPass = multiPass
+			opts.Mode = packMode
 			if encryptionKey != "" {
 				opts.EncryptionKey = encryptionKey
 			}
@@ -339,6 +341,7 @@ func packCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&multiPass, "multi-pass", false, "Habilitar compressão LSH Top-K em Duas Passagens (Otimiza delta)")
 	cmd.Flags().BoolVar(&streamMode, "stream", false, "Modo streaming — comprime pipes/stdin sem Seek (ex: tail -f | crompressor pack --stream)")
 	cmd.Flags().StringVar(&encryptionKey, "encrypt", "", "Chave/Senha para criptografia AES-256-GCM")
+	cmd.Flags().StringVar(&packMode, "mode", "vault", "Modo de operação: 'vault' (lossless) ou 'edge' (lossy)")
 
 	return cmd
 }

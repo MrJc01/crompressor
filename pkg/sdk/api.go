@@ -19,6 +19,7 @@ type PackCommand struct {
 	CodebookPath  string
 	EncryptionKey string
 	Concurrency   int
+	Mode          string
 }
 
 // UnpackCommand arguments for restoring a file.

@@ -39,6 +39,9 @@ func (c *DefaultCompressor) Pack(ctx context.Context, cmd PackCommand) (<-chan P
 		opts := cromlib.DefaultPackOptions()
 		opts.Concurrency = cmd.Concurrency
 		opts.EncryptionKey = cmd.EncryptionKey
+		if cmd.Mode != "" {
+			opts.Mode = cmd.Mode
+		}
 
 		opts.OnProgress = func(processedBytes int) {
 			progressCh <- ProgressEvent{

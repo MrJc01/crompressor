@@ -1,30 +1,35 @@
-# Relatório Consolidado de Auditoria CROM V23 (Singularity)
+# Relatório de Auditoria CROM
 
-**Status Geral:** APROVADO (Zero Entropy Leaks)
-**Lab:** SRE Mission Critical Edge Cluster
-**Data da Execução:** V23 Singularity Milestone
+**Data da Execução:** 2026-04-24 17:27:12
 
-Este documento reporta resumidamente o estresse absoluto da resiliência arquitetural do Motor de Extração Semântica do CROM. Em um laboratório submetido às maiores extremidades da Engenharia de Sistemas Distribuidos, do Nano-Segundo até o Exabyte Tático, o CROM absorveu todos os espectros sem erro, crash ou panic.
+## 1. Bench Ratio (Eficiência de Compressão)
 
-## 1. O Triunfo Escalonado: Bateria 01 à 70
+| Arquivo | Tamanho Original | Tamanho CROM | 
+|---------|------------------|--------------|
+| ARQUIVO | TAMANHO_ORIG(bytes) | TAMANHO_CROM(bytes) |
+| random.bin | 5242880 | 5242992 |
+| text.txt | 3638894 | 762495 |
+| code.go | 608894 | 128566 |
 
-Todas as **70 Baterias do Pipeline de Auditoria SRE** foram devidamente processadas em O(1) via Motor Cosenoidal e validadas criptograficamente através dos testes determinísticos, demonstrando integridade implacável e zero overhead estrutural.
+*O Hit Rate pode ser calculado comparando as colunas.*
 
-A suíte englobou espectros desde Micro-Edges até Macro-Astrais:
-*   [01-10] Padrões Universais, Texto Clássico JSONs, XMLs, CSVs. (Comprimidos via HNSW Mmap).
-*   [20-30] Modelos Tensor (`.safetensors`), Visão Computacional. Extração Semântica profunda via Small World Graphs.
-*   [30-40] Simulações de Blockchain, Criptografia Transacional, e Árvores Trie de Contratos Inteligentes.
-*   [40-50] Cargas Sensíveis Nacionais, DNA Sequenciado Básico.
-*   [50-60] Extremidades SRE: Latência em NANOSEGUNDOS HFT (High-Frequency Trading) das bolsas de valores e bypass Quântico de ruído entrópico via Heurística Shannon > 7.9.
-*   [60-70] A Borda do Infinito (Dyson Spheres, Vetores de Estado Quântico, Sinais do Rádio-Telescópio Square Kilometre Array, Tokamak Nuclear Fusion Plasma). Nenhuma ruptura estocástica presenciada. Todos os resíduos Δ decodificados no *Kill-Switch Sovereign VFS*.
+## 2. CDC Resilience (Shift de 1 Byte)
 
-## 2. Bypass de Aleatoriedade (Heurísticas Entrópicas Shannon)
+```text
+Tamanho Original (.crom): 674392 bytes
+Tamanho Shifted  (.crom): 674393 bytes
+Diferença Absoluta: 1 bytes
+```
 
-A Bateria **55 (Quantum Entanglement State Vector)** comprovou a maturação heurística. A engine intercepta cadeias estatisticamente indomináveis e aplica Passthrough Instantâneo sem saturar a L1 do disco FUSE. 
-**Resultado:** Zero-overhead overhead overhead sobre massas atômicas irreconhecíveis.
+## 3. Sovereignty Kill (Auto-Unmount FUSE)
 
-## 3. Sovereign Kill-Switch (O Desarme)
+✅ Passou: Ponto de montagem desapareceu instantaneamente em contato com a morte do codebook.
 
-Auditoria em Edge WASM isolada provou que na remoção manual e estresse via *watchers*, os nós de Bateria **23** e **47 (Satélites LEO)** ejetaram automaticamente o FUSE FS subjacente e varreram L1 em <400μs, garantindo o "Sovereign Unmount" criptográfico do ChaCha20/Dilithium. 
+## 4. Fuzziness Diff (LSH Clones)
 
-**Veredito Oficial do Lab:** A Engenharia de Sistemas alcançou a consolidação definitiva V23. Todas as infraestruturas estão autorizadas a migrar seu cluster para o CROM Singularity.
+```text
+img.00.raw - Tamanho: 1048576 bytes
+img.05.raw - Tamanho: 1048576 bytes
+img.10.raw - Tamanho: 1048576 bytes
+```
+
