@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>CROM Test 100 — 3D Artificial Life Evolution Simulator</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{background:#030a03;color:#e0ffe0;font-family:'Courier New',monospace;overflow:hidden}
+canvas{display:block}#hud{position:fixed;top:15px;left:15px;background:rgba(0,10,0,0.9);border:1px solid #40aa40;border-radius:10px;padding:15px;font-size:11px;z-index:10;max-width:300px;backdrop-filter:blur(8px)}
+h1{font-size:14px;color:#40ff40;margin-bottom:8px}.s{color:#669966;margin:3px 0}
+.btn{display:inline-block;padding:5px 12px;background:#0a200a;border:1px solid #308030;border-radius:4px;color:#88ff88;cursor:pointer;font-size:10px;margin:2px;font-family:inherit}.btn:hover{background:#104010}
+.hint{font-size:9px;color:#446644;margin-top:8px;line-height:1.6;border-top:1px solid #1a301a;padding-top:8px}
+</style>
+</head>
+<body>
+<div id="hud">
+<h1>🦠 3D Artificial Life Evolution</h1>
+<div class="s">Criaturas evoluem em terreno 3D</div>
+<div class="s" id="stats">Gen: 0 | Alive: 0 | Food: 0</div>
+<div>
+<span class="btn" onclick="reset()">🔄 Reset</span>
+<span class="btn" onclick="addFoodCluster()">🌿 +Food</span>
+<span class="btn" onclick="addPredator()">🦈 Predator</span>
+<span class="btn" onclick="plague()">☠️ Plague</span>
+<span class="btn" onclick="resetCam()">📷 Camera</span>
+</div>
+<div class="hint">
+🖱️ <b>Right drag:</b> Orbit 3D<br>
+🖱️ <b>Middle drag:</b> Pan<br>
+🖱️ <b>Scroll:</b> Zoom (infinite)<br>
+🖱️ <b>Shift+Click:</b> Spawn food at cursor
+</div>
+</div>
+<canvas id="c"></canvas>
+<script>
+const C=document.getElementById('c'),X=C.getContext('2d');let W,H;
+function resize(){W=C.width=innerWidth;H=C.height=innerHeight}resize();window.onresize=resize;
+
+// === 3D CAMERA (Unity-style) ===
+let camTheta=-0.4,camPhi=0.6,camDist=700,panX=0,panY=0;
+let orbiting=false,panning=false,orbS={},panS={};
+let ghostPos=null;
+const WORLD=400; // world half-size
+
+function project(x,y,z){
+  let ct=Math.cos(camTheta),st=Math.sin(camTheta),cp=Math.cos(camPhi),sp=Math.sin(camPhi);
+  let x1=x*ct+z*st,z1=-x*st+z*ct;
+  let y1=y*cp-z1*sp,z2=y*sp+z1*cp+camDist;
+  if(z2<1)z2=1;
+  let s=600/z2;
+  return{x:x1*s+W/2+panX,y:-y1*s+H/2+panY,z:z2,s};
+}
+function unproject(sx,sy){return{x:(sx-W/2-panX)*camDist/600,y:0,z:-(sy-H/2-panY)*camDist/600}}
+
+let creatures=[],food=[],gen=0;
+function rnd(a,b){return a+Math.random()*(b-a)}
+function dist3(a,b){return Math.sqrt((a.x-b.x)**2+(a.y-b.y)**2+(a.z-b.z)**2)}
+
+// Terrain height function
+function terrain(x,z){
+  return Math.sin(x*0.01)*8+Math.cos(z*0.015)*6+Math.sin((x+z)*0.008)*10;
+}
+
+class Creature{
+  constructor(x,z,dna){
+    this.x=x;this.z=z;this.y=terrain(x,z);
+    this.dna=dna||{speed:rnd(0.8,3),size:rnd(2,6),sense:rnd(40,140),r:Math.random(),g:Math.random(),b:Math.random(),aggression:Math.random()};
+    this.energy=100;this.age=0;this.dir=Math.random()*Math.PI*2;
+    this.predator=this.dna.aggression>0.8;
+  }
+  update(){
+    this.age++;this.energy-=0.05+this.dna.speed*0.015;
+    let target=null,minD=this.dna.sense;
+    if(this.predator){
+      for(let c of creatures){if(c===this||c.predator)continue;let d=dist3(this,c);if(d<minD){minD=d;target=c;}}
+    }else{
+      for(let f of food){let d=dist3(this,f);if(d<minD){minD=d;target=f;}}
+    }
+    if(target)this.dir=Math.atan2(target.z-this.z,target.x-this.x);
+    else this.dir+=rnd(-0.3,0.3);
+    this.x+=Math.cos(this.dir)*this.dna.speed;
+    this.z+=Math.sin(this.dir)*this.dna.speed;
+    this.y=terrain(this.x,this.z)+this.dna.size;
+    if(this.x<-WORLD)this.x=WORLD;if(this.x>WORLD)this.x=-WORLD;
+    if(this.z<-WORLD)this.z=WORLD;if(this.z>WORLD)this.z=-WORLD;
+    if(!this.predator){
+      food=food.filter(f=>{if(dist3(this,f)<this.dna.size+5){this.energy+=30;return false;}return true;});
+    }else{
+      creatures.forEach(c=>{if(c!==this&&!c.predator&&dist3(this,c)<this.dna.size+c.dna.size+2){this.energy+=50;c.energy=-1;}});
+    }
+    if(this.energy>150&&Math.random()<0.01){
+      let cd={...this.dna};let keys=Object.keys(cd);let k=keys[Math.floor(Math.random()*keys.length)];
+      if(typeof cd[k]==='number')cd[k]*=rnd(0.85,1.15);
+      cd.aggression=Math.max(0,Math.min(1,cd.aggression));
+      creatures.push(new Creature(this.x+rnd(-10,10),this.z+rnd(-10,10),cd));
+      this.energy-=60;gen++;
+    }
+  }
+}
+
+function addFoodAt(fx,fz,n){for(let i=0;i<n;i++)food.push({x:fx+rnd(-30,30),y:0,z:fz+rnd(-30,30)});}
+function addFoodCluster(){addFoodAt(rnd(-WORLD,WORLD),rnd(-WORLD,WORLD),50)}
+function addPredator(){
+  let dna={speed:rnd(2,4.5),size:rnd(5,10),sense:rnd(80,200),r:1,g:0.2,b:0.1,aggression:0.95};
+  creatures.push(new Creature(rnd(-WORLD,WORLD),rnd(-WORLD,WORLD),dna));
+}
+function plague(){creatures=creatures.filter(()=>Math.random()>0.5)}
+function resetCam(){camTheta=-0.4;camPhi=0.6;camDist=700;panX=0;panY=0}
+
+function reset(){
+  creatures=[];food=[];gen=0;
+  for(let i=0;i<80;i++)creatures.push(new Creature(rnd(-WORLD,WORLD),rnd(-WORLD,WORLD)));
+  for(let i=0;i<10;i++)addFoodAt(rnd(-WORLD,WORLD),rnd(-WORLD,WORLD),20);
+}
+
+function draw(){
+  X.fillStyle='rgba(3,10,3,0.3)';X.fillRect(0,0,W,H);
+  if(Math.random()<0.08)addFoodAt(rnd(-WORLD,WORLD),rnd(-WORLD,WORLD),3);
+  creatures.forEach(c=>c.update());
+  creatures=creatures.filter(c=>c.energy>0&&c.age<3000);
+
+  // Ground grid
+  X.strokeStyle='rgba(30,60,30,0.2)';X.lineWidth=0.5;
+  for(let g=-WORLD;g<=WORLD;g+=60){
+    let pts=[];for(let t=-WORLD;t<=WORLD;t+=30){let p=project(g,terrain(g,t),t);pts.push(p);}
+    X.beginPath();pts.forEach((p,i)=>i===0?X.moveTo(p.x,p.y):X.lineTo(p.x,p.y));X.stroke();
+    pts=[];for(let t=-WORLD;t<=WORLD;t+=30){let p=project(t,terrain(t,g),g);pts.push(p);}
+    X.beginPath();pts.forEach((p,i)=>i===0?X.moveTo(p.x,p.y):X.lineTo(p.x,p.y));X.stroke();
+  }
+
+  // Ghost preview
+  if(ghostPos){
+    let gy=terrain(ghostPos.x,ghostPos.z);
+    let gp=project(ghostPos.x,gy,ghostPos.z);
+    X.globalAlpha=0.4;X.strokeStyle='#40ff40';X.lineWidth=2;
+    X.beginPath();X.arc(gp.x,gp.y,20,0,Math.PI*2);X.stroke();
+    X.fillStyle='rgba(64,255,64,0.1)';X.fill();
+    X.font='10px monospace';X.fillStyle='#80ff80';X.fillText('🌿 Food cluster',gp.x+25,gp.y);
+    X.globalAlpha=1;
+  }
+
+  // Collect all drawable items
+  let items=[];
+  food.forEach(f=>{f.y=terrain(f.x,f.z)+2;let p=project(f.x,f.y,f.z);items.push({...p,type:'food',data:f});});
+  creatures.forEach(c=>{let p=project(c.x,c.y,c.z);items.push({...p,type:'creature',data:c});});
+  items.sort((a,b)=>b.z-a.z);
+
+  items.forEach(item=>{
+    if(item.type==='food'){
+      let r=Math.max(1.5,item.s*3);
+      X.fillStyle='#40aa40';X.globalAlpha=Math.min(1,300/item.z);
+      X.beginPath();X.arc(item.x,item.y,r,0,Math.PI*2);X.fill();
+      // Shadow
+      let sp=project(item.data.x,terrain(item.data.x,item.data.z),item.data.z);
+      X.fillStyle='rgba(0,0,0,0.15)';X.beginPath();X.ellipse(sp.x,sp.y,r*1.2,r*0.4,0,0,Math.PI*2);X.fill();
+    }else{
+      let c=item.data,r=Math.max(2,item.s*c.dna.size*0.6);
+      let alpha=Math.min(1,Math.max(0.1,c.energy/80)*300/item.z);
+      X.globalAlpha=alpha;
+      // Body sphere
+      let grd=X.createRadialGradient(item.x-r*0.3,item.y-r*0.3,r*0.1,item.x,item.y,r);
+      if(c.predator){
+        grd.addColorStop(0,'#ff8844');grd.addColorStop(1,'#882200');
+      }else{
+        grd.addColorStop(0,`rgb(${Math.floor(c.dna.r*100)},${Math.floor(200+c.dna.g*55)},${Math.floor(c.dna.b*100)})`);
+        grd.addColorStop(1,`rgb(${Math.floor(c.dna.r*40)},${Math.floor(80+c.dna.g*20)},${Math.floor(c.dna.b*40)})`);
+      }
+      X.fillStyle=grd;X.beginPath();X.arc(item.x,item.y,r,0,Math.PI*2);X.fill();
+      // Shadow on ground
+      let sp=project(c.x,terrain(c.x,c.z),c.z);
+      X.fillStyle='rgba(0,0,0,0.2)';X.beginPath();X.ellipse(sp.x,sp.y,r*1.3,r*0.3,0,0,Math.PI*2);X.fill();
+      // Sense radius (faint)
+      if(c.dna.sense>80&&r>3){
+        X.strokeStyle=c.predator?'rgba(255,80,40,0.06)':'rgba(100,200,100,0.06)';
+        X.beginPath();X.arc(item.x,item.y,c.dna.sense*item.s*0.3,0,Math.PI*2);X.stroke();
+      }
+    }
+    X.globalAlpha=1;
+  });
+
+  document.getElementById('stats').textContent=`Gen: ${gen} | Alive: ${creatures.length} | Food: ${food.length} | 🦈 ${creatures.filter(c=>c.predator).length}`;
+  requestAnimationFrame(draw);
+}
+
+// === CONTROLS (Unity-style) ===
+C.addEventListener('mousedown',e=>{
+  if(e.button===2){orbiting=true;orbS={x:e.clientX,y:e.clientY,t:camTheta,p:camPhi};e.preventDefault();}
+  else if(e.button===1){panning=true;panS={x:e.clientX,y:e.clientY,px:panX,py:panY};e.preventDefault();}
+  else if(e.button===0&&e.shiftKey){let wp=unproject(e.clientX,e.clientY);addFoodAt(wp.x,wp.z,20);}
+});
+C.addEventListener('mouseup',e=>{if(e.button===2)orbiting=false;if(e.button===1)panning=false;});
+C.addEventListener('mousemove',e=>{
+  if(e.shiftKey){ghostPos=unproject(e.clientX,e.clientY);}else{ghostPos=null;}
+  if(orbiting){camTheta=orbS.t+(e.clientX-orbS.x)*0.005;camPhi=orbS.p+(e.clientY-orbS.y)*0.005;camPhi=Math.max(0.05,Math.min(Math.PI/2-0.05,camPhi));}
+  if(panning){panX=panS.px+(e.clientX-panS.x);panY=panS.py+(e.clientY-panS.y);}
+});
+C.addEventListener('wheel',e=>{e.preventDefault();camDist*=e.deltaY>0?1.08:0.92;camDist=Math.max(10,camDist);},{passive:false});
+C.addEventListener('contextmenu',e=>e.preventDefault());
+
+reset();draw();
+</script>
+</body>
+</html>

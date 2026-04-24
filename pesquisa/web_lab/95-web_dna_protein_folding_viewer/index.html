@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>CROM Test 95 — DNA Protein Folding Viewer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{background:#080818;color:#e0e0ff;font-family:'Courier New',monospace;overflow:hidden}
+canvas{display:block}#hud{position:fixed;top:15px;left:15px;background:rgba(0,0,20,0.9);border:1px solid #20aa60;border-radius:12px;padding:18px;font-size:11px;z-index:10;max-width:300px;backdrop-filter:blur(10px)}
+h1{font-size:15px;color:#40ff80;margin-bottom:8px}.s{color:#6688cc;margin:4px 0;line-height:1.5}
+.btn{display:inline-block;padding:6px 14px;background:#0a200a;border:1px solid #308030;border-radius:6px;color:#88ff88;cursor:pointer;font-size:11px;margin:3px;font-family:inherit;transition:all .2s}
+.btn:hover{background:#104010;transform:translateY(-1px)}
+#seq{word-break:break-all;font-size:9px;color:#40ff80;margin-top:10px;max-height:50px;overflow:auto;background:rgba(0,40,0,0.3);padding:6px;border-radius:4px}
+</style>
+</head>
+<body>
+<div id="hud">
+<h1>🧬 DNA Protein Folding Viewer</h1>
+<div class="s">Simulação 3D de dobramento proteico em tempo real</div>
+<div class="s" id="info">Aminoácidos: 0 | Energia: 0 kcal/mol</div>
+<div>
+<span class="btn" onclick="genProtein(60)">Small (60aa)</span>
+<span class="btn" onclick="genProtein(150)">Medium (150aa)</span>
+<span class="btn" onclick="genProtein(300)">Large (300aa)</span>
+<span class="btn" onclick="toggleSpin()">🔄 Spin</span>
+<span class="btn" onclick="resetCam()">📷 Camera</span>
+</div>
+<div style="font-size:9px;color:#446644;margin-top:8px;line-height:1.6;border-top:1px solid #1a301a;padding-top:8px">
+🖱️ <b>Right drag:</b> Orbit 3D<br>
+🖱️ <b>Middle drag:</b> Pan<br>
+🖱️ <b>Scroll:</b> Zoom (infinite)<br>
+🖱️ <b>Left drag:</b> Orbit (legacy)
+</div>
+<div id="seq"></div>
+</div>
+<canvas id="c"></canvas>
+<script>
+const C=document.getElementById('c'),X=C.getContext('2d');let W,H;
+function resize(){W=C.width=innerWidth;H=C.height=innerHeight}resize();window.onresize=resize;
+const AA='ACDEFGHIKLMNPQRSTVWY';
+const COLORS={A:'#ff6060',C:'#ffff60',D:'#ff9040',E:'#ff60ff',F:'#60ffff',G:'#90ff60',H:'#6090ff',I:'#ff9090',K:'#9090ff',L:'#60ff90',M:'#ffcc60',N:'#cc60ff',P:'#60ccff',Q:'#ff60cc',R:'#90ffcc',S:'#ccff60',T:'#ff7070',V:'#70ff70',W:'#7070ff',Y:'#ffbb70'};
+const HYDRO={A:1.8,C:2.5,D:-3.5,E:-3.5,F:2.8,G:-0.4,H:-3.2,I:4.5,K:-3.9,L:3.8,M:1.9,N:-3.5,P:-1.6,Q:-3.5,R:-4.5,S:-0.8,T:-0.7,V:4.2,W:-0.9,Y:-1.3};
+let atoms=[],bonds=[],hbonds=[],spin=true,rotX=-0.3,rotY=0,energy=0;
+let zoomLevel=8,panX=0,panY=0;
+let orbiting2=false,panning2=false,orbS2={},panS2={};
+
+function genProtein(n){
+  atoms=[];bonds=[];hbonds=[];let seq='';
+  // Generate compact globular structure using secondary structure simulation
+  let x=0,y=0,z=0;
+  let mode='coil'; // coil, helix, sheet
+  let modeLen=0,modeMax=8;
+
+  for(let i=0;i<n;i++){
+    let aa=AA[Math.floor(Math.random()*AA.length)];seq+=aa;
+
+    // Switch secondary structure modes randomly
+    if(modeLen>=modeMax){
+      let r=Math.random();
+      if(r<0.4)mode='helix';else if(r<0.7)mode='sheet';else mode='coil';
+      modeLen=0;modeMax=5+Math.floor(Math.random()*12);
+    }
+
+    if(mode==='helix'){
+      // Alpha helix: 3.6 residues per turn, rise 1.5Å per residue
+      let angle=i*100*(Math.PI/180); // 100° per residue
+      let rise=2.0;
+      let helixR=3.5;
+      x+=helixR*Math.cos(angle);
+      y+=rise;
+      z+=helixR*Math.sin(angle);
+    } else if(mode==='sheet'){
+      // Beta sheet: extended, zigzag
+      let zigzag=(i%2===0)?1.5:-1.5;
+      x+=3.2;
+      y+=zigzag;
+      z+=(Math.random()-0.5)*4;
+    } else {
+      // Random coil: more compact turns
+      let theta=Math.random()*Math.PI*2;
+      let phi=Math.random()*Math.PI-Math.PI/2;
+      let step=2+Math.random()*2;
+      x+=Math.cos(theta)*Math.cos(phi)*step;
+      y+=Math.sin(phi)*step;
+      z+=Math.sin(theta)*Math.cos(phi)*step;
+    }
+
+    // Add some overall folding — gravitate toward center
+    let cx=atoms.length>0?atoms.reduce((s,a)=>s+a.x,0)/atoms.length:0;
+    let cy=atoms.length>0?atoms.reduce((s,a)=>s+a.y,0)/atoms.length:0;
+    let cz=atoms.length>0?atoms.reduce((s,a)=>s+a.z,0)/atoms.length:0;
+    // Hydrophobic residues fold inward
+    let hydro=(HYDRO[aa]||0)/10;
+    x+=(cx-x)*Math.max(0,hydro)*0.12;
+    y+=(cy-y)*Math.max(0,hydro)*0.12;
+    z+=(cz-z)*Math.max(0,hydro)*0.12;
+
+    atoms.push({x,y,z,aa,color:COLORS[aa]||'#fff',mode,i});
+    if(i>0)bonds.push({a:i-1,b:i,type:'backbone'});
+    modeLen++;
+  }
+
+  // Center the protein
+  let mx=atoms.reduce((s,a)=>s+a.x,0)/n;
+  let my=atoms.reduce((s,a)=>s+a.y,0)/n;
+  let mz=atoms.reduce((s,a)=>s+a.z,0)/n;
+  atoms.forEach(a=>{a.x-=mx;a.y-=my;a.z-=mz;});
+
+  // Generate hydrogen bonds (disulfide bridges between cysteines, and random H-bonds)
+  for(let i=0;i<n;i++){
+    for(let j=i+4;j<n;j++){
+      let dx=atoms[i].x-atoms[j].x,dy=atoms[i].y-atoms[j].y,dz=atoms[i].z-atoms[j].z;
+      let d=Math.sqrt(dx*dx+dy*dy+dz*dz);
+      if(d<4&&Math.random()<0.3){
+        hbonds.push({a:i,b:j});
+      }
+    }
+  }
+
+  energy=-Math.floor(Math.random()*300+n*3);
+  document.getElementById('seq').textContent=seq;
+  document.getElementById('info').textContent=`Aminoácidos: ${n} | Energia: ${energy} kcal/mol | H-bonds: ${hbonds.length}`;
+}
+
+function project(px,py,pz){
+  let cx=Math.cos(rotX),sx=Math.sin(rotX),cy=Math.cos(rotY),sy=Math.sin(rotY);
+  let x1=px*cy-pz*sy,z1=px*sy+pz*cy;
+  let y1=py*cx-z1*sx,z2=py*sx+z1*cx;
+  let fov=500;
+  let scale=fov/(fov+z2);
+  return{sx:x1*scale*zoomLevel+W/2+panX,sy:y1*scale*zoomLevel+H/2+panY,sz:z2,scale};
+}
+
+let t=0;
+function draw(){
+  X.fillStyle='#080818';X.fillRect(0,0,W,H);
+  t+=0.008;
+  if(spin)rotY+=0.006;
+
+  // Project all atoms (sx/sy/sz to avoid overwriting world coords)
+  let projected=atoms.map(a=>{
+    let p=project(a.x,a.y,a.z);
+    return{sx:p.sx,sy:p.sy,sz:p.sz,scale:p.scale,aa:a.aa,color:a.color,mode:a.mode,i:a.i};
+  });
+
+  // Draw hydrogen bonds (dashed, faint)
+  hbonds.forEach(hb=>{
+    let a=projected[hb.a],b=projected[hb.b];
+    X.strokeStyle='rgba(255,255,100,0.12)';
+    X.lineWidth=1;X.setLineDash([3,5]);
+    X.beginPath();X.moveTo(a.sx,a.sy);X.lineTo(b.sx,b.sy);X.stroke();
+    X.setLineDash([]);
+  });
+
+  // Draw backbone bonds (colored by secondary structure)
+  bonds.forEach(bond=>{
+    let a=projected[bond.a],b=projected[bond.b];
+    let avgScale=(a.scale+b.scale)/2;
+    let mode=atoms[bond.b].mode;
+    let color=mode==='helix'?'rgba(255,100,100,':'rgba(100,180,255,';
+    if(mode==='coil')color='rgba(180,180,180,';
+    X.strokeStyle=color+(0.3+avgScale*0.4)+')';
+    X.lineWidth=Math.max(1.5,avgScale*4);
+    X.beginPath();X.moveTo(a.sx,a.sy);X.lineTo(b.sx,b.sy);X.stroke();
+  });
+
+  // Sort by depth for correct overlap
+  let sorted=[...projected];
+  sorted.sort((a,b)=>a.sz-b.sz);
+
+  // Draw atoms
+  sorted.forEach(a=>{
+    let r=Math.max(3,a.scale*8);
+    let alpha=0.5+a.scale*0.4;
+
+    // Glow
+    let grd=X.createRadialGradient(a.sx,a.sy,0,a.sx,a.sy,r*2);
+    grd.addColorStop(0,a.color);
+    grd.addColorStop(1,'transparent');
+    X.globalAlpha=alpha*0.3;
+    X.fillStyle=grd;
+    X.beginPath();X.arc(a.sx,a.sy,r*2,0,Math.PI*2);X.fill();
+
+    // Main sphere
+    X.globalAlpha=alpha;
+    let sGrd=X.createRadialGradient(a.sx-r*0.3,a.sy-r*0.3,r*0.1,a.sx,a.sy,r);
+    sGrd.addColorStop(0,'#ffffff');
+    sGrd.addColorStop(0.3,a.color);
+    sGrd.addColorStop(1,'rgba(0,0,0,0.5)');
+    X.fillStyle=sGrd;
+    X.beginPath();X.arc(a.sx,a.sy,r,0,Math.PI*2);X.fill();
+
+    // Label
+    if(r>5){
+      X.globalAlpha=alpha*0.9;
+      X.font=`bold ${Math.floor(r*1.2)}px monospace`;
+      X.fillStyle='#fff';
+      X.textAlign='center';X.textBaseline='middle';
+      X.fillText(a.aa,a.sx,a.sy);
+    }
+    X.globalAlpha=1;
+  });
+
+  // Legend
+  X.fillStyle='rgba(0,0,20,0.7)';X.fillRect(W-160,H-80,150,70);
+  X.font='10px monospace';
+  X.fillStyle='#ff6666';X.fillRect(W-155,H-72,10,10);X.fillStyle='#ff6666';X.fillText('α-Helix',W-140,H-63);
+  X.fillStyle='#6699ff';X.fillRect(W-155,H-57,10,10);X.fillStyle='#6699ff';X.fillText('β-Sheet',W-140,H-48);
+  X.fillStyle='#aaaaaa';X.fillRect(W-155,H-42,10,10);X.fillStyle='#aaaaaa';X.fillText('Random Coil',W-140,H-33);
+
+  requestAnimationFrame(draw);
+}
+
+function toggleSpin(){spin=!spin}
+function resetCam(){rotX=-0.3;rotY=0;zoomLevel=8;panX=0;panY=0}
+let dragging=false,lx,ly;
+// === Unity-style controls ===
+C.addEventListener('mousedown',e=>{
+  if(e.button===2){orbiting2=true;orbS2={x:e.clientX,y:e.clientY,rx:rotX,ry:rotY};spin=false;e.preventDefault();}
+  else if(e.button===1){panning2=true;panS2={x:e.clientX,y:e.clientY,px:panX,py:panY};e.preventDefault();}
+  else if(e.button===0){dragging=true;lx=e.clientX;ly=e.clientY;spin=false;}
+});
+C.addEventListener('mouseup',e=>{
+  if(e.button===2)orbiting2=false;
+  if(e.button===1)panning2=false;
+  if(e.button===0)dragging=false;
+});
+C.addEventListener('mousemove',e=>{
+  if(orbiting2){rotY=orbS2.ry+(e.clientX-orbS2.x)*0.01;rotX=orbS2.rx+(e.clientY-orbS2.y)*0.01;}
+  if(panning2){panX=panS2.px+(e.clientX-panS2.x);panY=panS2.py+(e.clientY-panS2.y);}
+  if(dragging){rotY+=(e.clientX-lx)*0.01;rotX+=(e.clientY-ly)*0.01;lx=e.clientX;ly=e.clientY;}
+});
+C.addEventListener('wheel',e=>{e.preventDefault();let f=e.deltaY>0?0.92:1.08;zoomLevel*=f;zoomLevel=Math.max(0.5,zoomLevel);},{passive:false});
+C.addEventListener('contextmenu',e=>e.preventDefault());
+genProtein(150);draw();
+</script>
+</body>
+</html>

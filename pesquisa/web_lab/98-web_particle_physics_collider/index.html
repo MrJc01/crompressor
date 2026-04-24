@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>CROM Test 98 — 3D Particle Physics Collider</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{background:#050510;color:#e0e0ff;font-family:'Courier New',monospace;overflow:hidden}
+canvas{display:block}#hud{position:fixed;top:15px;left:15px;background:rgba(0,0,20,0.9);border:1px solid #ff4040;border-radius:10px;padding:15px;font-size:11px;z-index:10;max-width:310px;backdrop-filter:blur(8px)}
+h1{font-size:14px;color:#ff8040;margin-bottom:8px}.s{color:#8888cc;margin:3px 0}
+.btn{display:inline-block;padding:5px 12px;background:#200a0a;border:1px solid #aa3030;border-radius:4px;color:#ff8888;cursor:pointer;font-size:10px;margin:2px;font-family:inherit}.btn:hover{background:#401010}
+.hint{font-size:9px;color:#4466aa;margin-top:8px;line-height:1.6;border-top:1px solid #1a1a30;padding-top:8px}
+</style>
+</head>
+<body>
+<div id="hud">
+<h1>⚛️ 3D Particle Physics Collider</h1>
+<div class="s">Colisões sub-atômicas em espaço 3D completo</div>
+<div class="s" id="stats">Partículas: 0 | Colisões: 0</div>
+<div>
+<span class="btn" onclick="collide()">💥 COLLIDE!</span>
+<span class="btn" onclick="addBeam()">🔵 Beam</span>
+<span class="btn" onclick="reset()">🔄 Reset</span>
+</div>
+<div class="hint">
+🖱️ <b>Right drag:</b> Orbit 3D<br>
+🖱️ <b>Middle drag:</b> Pan<br>
+🖱️ <b>Scroll:</b> Zoom (infinite)<br>
+🖱️ <b>Shift+Click:</b> Spawn collision at cursor
+</div>
+</div>
+<canvas id="c"></canvas>
+<script>
+const C=document.getElementById('c'),X=C.getContext('2d');let W,H;
+function resize(){W=C.width=innerWidth;H=C.height=innerHeight}resize();window.onresize=resize;
+
+// === 3D CAMERA (Unity-style orbit) ===
+let camTheta=0.3,camPhi=0.4,camDist=600,panX=0,panY=0;
+let orbiting=false,panning=false,orbStart={},panStart={};
+
+const TYPES=[
+  {name:'quark',color:'#ff4040',mass:2.3,charge:2/3,r:3},
+  {name:'electron',color:'#4060ff',mass:0.511,charge:-1,r:2},
+  {name:'muon',color:'#40ff40',mass:105.7,charge:-1,r:2.5},
+  {name:'photon',color:'#ffff40',mass:0,charge:0,r:1.5},
+  {name:'higgs',color:'#ff40ff',mass:125000,charge:0,r:5},
+  {name:'neutrino',color:'#40ffff',mass:0.001,charge:0,r:1}
+];
+let particles=[],trails=[],collisions=0,totalEnergy=0;
+let ghostPos=null;
+
+function project(x,y,z){
+  // Rotate by camera angles
+  let ct=Math.cos(camTheta),st=Math.sin(camTheta);
+  let cp=Math.cos(camPhi),sp=Math.sin(camPhi);
+  let x1=x*ct+z*st, z1=-x*st+z*ct;
+  let y1=y*cp-z1*sp, z2=y*sp+z1*cp;
+  z2+=camDist;
+  if(z2<1)z2=1;
+  let fov=800;
+  let scale=fov/z2;
+  return{x:x1*scale+W/2+panX,y:-y1*scale+H/2+panY,z:z2,scale};
+}
+
+function unproject(sx,sy){
+  // Approximate world position at z=0 plane
+  let ct=Math.cos(camTheta),st=Math.sin(camTheta);
+  let cp=Math.cos(camPhi),sp=Math.sin(camPhi);
+  let fov=800;
+  let nx=(sx-W/2-panX)/fov, ny=-(sy-H/2-panY)/fov;
+  return{x:nx*camDist*0.8,y:ny*camDist*0.8,z:0};
+}
+
+function addBeam(){
+  let n=25;
+  for(let i=0;i<n;i++){
+    let side=Math.random()>0.5;let type=TYPES[Math.floor(Math.random()*3)];
+    let py=(Math.random()-0.5)*80,pz=(Math.random()-0.5)*80;
+    particles.push({x:side?-300:300,y:py,z:pz,
+      vx:side?(2+Math.random()*4):-(2+Math.random()*4),
+      vy:(Math.random()-0.5)*1.5,vz:(Math.random()-0.5)*1.5,
+      type,life:1,r:type.r});
+  }
+}
+
+function collideAt(cx,cy,cz){
+  for(let i=0;i<60;i++){
+    let theta=Math.random()*Math.PI*2,phi=Math.acos(Math.random()*2-1);
+    let speed=2+Math.random()*8;
+    let type=TYPES[Math.floor(Math.random()*TYPES.length)];
+    particles.push({x:cx,y:cy,z:cz,
+      vx:Math.sin(phi)*Math.cos(theta)*speed,
+      vy:Math.sin(phi)*Math.sin(theta)*speed,
+      vz:Math.cos(phi)*speed,
+      type,life:1,r:type.r});
+    totalEnergy+=type.mass*0.001;collisions++;
+  }
+  for(let i=0;i<300;i++){
+    let theta=Math.random()*Math.PI*2,phi=Math.acos(Math.random()*2-1);
+    let speed=1+Math.random()*15;
+    trails.push({x:cx,y:cy,z:cz,
+      vx:Math.sin(phi)*Math.cos(theta)*speed,
+      vy:Math.sin(phi)*Math.sin(theta)*speed,
+      vz:Math.cos(phi)*speed,
+      life:1,color:`hsl(${Math.random()*360},100%,70%)`});
+  }
+}
+
+function collide(){collideAt(0,0,0)}
+function reset(){particles=[];trails=[];collisions=0;totalEnergy=0;camTheta=0.3;camPhi=0.4;camDist=600;panX=0;panY=0}
+
+function draw(){
+  X.fillStyle='rgba(5,5,16,0.2)';X.fillRect(0,0,W,H);
+
+  // Detector rings (3D)
+  X.strokeStyle='rgba(40,40,80,0.2)';X.lineWidth=0.5;
+  for(let ring=50;ring<=300;ring+=60){
+    let pts=[];
+    for(let a=0;a<=Math.PI*2;a+=0.1){
+      let p=project(Math.cos(a)*ring,Math.sin(a)*ring,0);
+      pts.push(p);
+    }
+    X.beginPath();pts.forEach((p,i)=>i===0?X.moveTo(p.x,p.y):X.lineTo(p.x,p.y));X.closePath();X.stroke();
+  }
+  // Beam pipe (3D line)
+  let bp1=project(-400,0,0),bp2=project(400,0,0);
+  X.strokeStyle='rgba(100,100,200,0.15)';X.lineWidth=2;
+  X.beginPath();X.moveTo(bp1.x,bp1.y);X.lineTo(bp2.x,bp2.y);X.stroke();
+
+  // Axes
+  let ox=project(0,0,0),ax=project(100,0,0),ay=project(0,100,0),az=project(0,0,100);
+  X.lineWidth=1;
+  X.strokeStyle='rgba(255,60,60,0.3)';X.beginPath();X.moveTo(ox.x,ox.y);X.lineTo(ax.x,ax.y);X.stroke();
+  X.strokeStyle='rgba(60,255,60,0.3)';X.beginPath();X.moveTo(ox.x,ox.y);X.lineTo(ay.x,ay.y);X.stroke();
+  X.strokeStyle='rgba(60,60,255,0.3)';X.beginPath();X.moveTo(ox.x,ox.y);X.lineTo(az.x,az.y);X.stroke();
+
+  // Ghost preview
+  if(ghostPos){
+    let gp=project(ghostPos.x,ghostPos.y,ghostPos.z);
+    X.globalAlpha=0.35;
+    X.strokeStyle='#ff6060';X.lineWidth=2;
+    X.beginPath();X.arc(gp.x,gp.y,30,0,Math.PI*2);X.stroke();
+    X.fillStyle='rgba(255,96,96,0.08)';X.fill();
+    X.font='10px monospace';X.fillStyle='#ff8080';X.fillText('💥 Shift+Click to collide here',gp.x+35,gp.y);
+    X.globalAlpha=1;
+  }
+
+  // Update & draw particles
+  particles=particles.filter(p=>{
+    p.x+=p.vx;p.y+=p.vy;p.z+=p.vz;p.life-=0.003;p.vx*=0.999;p.vy*=0.999;p.vz*=0.999;
+    if(p.type.charge!==0){let f=p.type.charge*0.015;let tvx=p.vx;p.vx+=p.vy*f;p.vy-=tvx*f;p.vz+=p.vx*f*0.3;}
+    if(p.life<=0)return false;
+    trails.push({x:p.x,y:p.y,z:p.z,vx:0,vy:0,vz:0,life:0.25,color:p.type.color});
+    let pp=project(p.x,p.y,p.z);
+    let r=Math.max(1,p.r*pp.scale*0.5);
+    X.globalAlpha=p.life;X.fillStyle=p.type.color;
+    X.beginPath();X.arc(pp.x,pp.y,r,0,Math.PI*2);X.fill();
+    X.globalAlpha=1;return true;
+  });
+
+  trails=trails.filter(t=>{
+    t.x+=t.vx;t.y+=t.vy;t.z+=t.vz;t.life-=0.015;t.vx*=0.95;t.vy*=0.95;t.vz*=0.95;
+    if(t.life<=0)return false;
+    let tp=project(t.x,t.y,t.z);
+    X.globalAlpha=t.life*0.4;X.fillStyle=t.color;
+    X.fillRect(tp.x,tp.y,Math.max(1,tp.scale),Math.max(1,tp.scale));
+    X.globalAlpha=1;return true;
+  });
+
+  document.getElementById('stats').textContent=`Partículas: ${particles.length} | Colisões: ${collisions} | Energia: ${totalEnergy.toFixed(1)} TeV`;
+  requestAnimationFrame(draw);
+}
+
+// === MOUSE CONTROLS (Unity-style) ===
+C.addEventListener('mousedown',e=>{
+  if(e.button===2){orbiting=true;orbStart={x:e.clientX,y:e.clientY,t:camTheta,p:camPhi};e.preventDefault();}
+  else if(e.button===1){panning=true;panStart={x:e.clientX,y:e.clientY,px:panX,py:panY};e.preventDefault();}
+  else if(e.button===0&&e.shiftKey){let wp=unproject(e.clientX,e.clientY);collideAt(wp.x,wp.y,wp.z);}
+});
+C.addEventListener('mouseup',e=>{if(e.button===2)orbiting=false;if(e.button===1)panning=false;});
+C.addEventListener('mousemove',e=>{
+  if(e.shiftKey){ghostPos=unproject(e.clientX,e.clientY);}else{ghostPos=null;}
+  if(orbiting){camTheta=orbStart.t+(e.clientX-orbStart.x)*0.005;camPhi=orbStart.p+(e.clientY-orbStart.y)*0.005;camPhi=Math.max(-Math.PI/2+0.1,Math.min(Math.PI/2-0.1,camPhi));}
+  if(panning){panX=panStart.px+(e.clientX-panStart.x);panY=panStart.py+(e.clientY-panStart.y);}
+});
+C.addEventListener('wheel',e=>{
+  e.preventDefault();
+  let factor=e.deltaY>0?1.08:0.92;
+  camDist*=factor;camDist=Math.max(10,camDist);
+},{passive:false});
+C.addEventListener('contextmenu',e=>e.preventDefault());
+
+addBeam();addBeam();setTimeout(collide,300);draw();
+</script>
+</body>
+</html>

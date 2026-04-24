@@ -27,6 +27,7 @@ import (
 
 // PackOptions defines the compiler settings.
 type PackOptions struct {
+	Mode          string   // "edge" (lossy) ou "vault" (lossless, default)
 	CodebookPaths []string // [0]=L3, [1]=L2, [2]=L1 (up to 3 supported)
 	Concurrency   int
 	EncryptionKey string // Passphrase for AES-256-GCM. If empty, no encryption.
@@ -60,6 +61,7 @@ type Metrics struct {
 // DefaultPackOptions returns sensible defaults.
 func DefaultPackOptions() PackOptions {
 	return PackOptions{
+		Mode:        "vault",
 		Concurrency: 4,
 		ChunkSize:   chunker.DefaultChunkSize,
 		UseCDC:      false,
@@ -101,7 +103,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	if err != nil {
 		return nil, fmt.Errorf("pack: entropy analysis: %w", err)
 	}
-	isPassthrough := entropy.DetectHeuristicBypass(eScore, startBytes) || entropy.IsLowEntropy(eScore)
+	isPassthrough := opts.Mode != "edge" && (entropy.DetectHeuristicBypass(eScore, startBytes) || entropy.IsLowEntropy(eScore))
 
 	// Adaptive Chunk Size Configuration
 	if opts.ChunkSize <= 0 {
@@ -396,7 +398,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 							}
 						}
 
-						if chunkEntropy > 3.00 || entropy.DetectHeuristicBypass(chunkEntropy, chunk.Data) {
+						if opts.Mode != "edge" && (chunkEntropy > 3.00 || entropy.DetectHeuristicBypass(chunkEntropy, chunk.Data)) {
 							// Passthrough High-Entropy Chunk (Treat as Literal immediately)
 							results[i] = processedChunk{
 								res: chunk.Data,
@@ -443,7 +445,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 									dynamicPatchThreshold = 0.95
 								}
 								
-								if sim < 0.20 {
+								if sim < 0.20 && opts.Mode != "edge" {
 									bestRes = chunk.Data
 									bestCodeID = format.LiteralCodebookID
 									bestCbIdx = format.LiteralCodebookIndex
@@ -461,6 +463,11 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 									}
 								} else {
 									bestRes = delta.XOR(chunk.Data, usablePattern)
+								}
+
+								// BIFURCAÇÃO DE SHANNON: No modo Edge, descartamos a diferença (Lossy)
+								if opts.Mode == "edge" && bestCodeID != format.LiteralCodebookID {
+									bestRes = []byte{}
 								}
 							}
 							
@@ -689,7 +696,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	// the codebook was ineffective. Rewrite as passthrough to guarantee zero expansion.
 	// Only for files larger than the header size (141B), since micro-files always expand.
 	headerOverhead := uint64(format.HeaderSizeV8)
-	if packedSize > originalSize && originalSize > headerOverhead {
+	if opts.Mode != "edge" && packedSize > originalSize && originalSize > headerOverhead {
 		// Rewind and rewrite as passthrough
 		outFile.Truncate(0)
 		outFile.Seek(0, 0)

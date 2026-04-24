@@ -210,10 +210,11 @@ func handlePack(w http.ResponseWriter, r *http.Request) {
 		Output   string `json:"output"`
 		Codebook string `json:"codebook"`
 		Key      string `json:"key"`
+		Mode     string `json:"mode"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil { jsonResp(w, 400, APIResponse{Error: "invalid JSON"}); return }
 	if req.Input == "" || req.Output == "" || req.Codebook == "" { jsonResp(w, 400, APIResponse{Error: "input, output, codebook required"}); return }
-	go comp.Pack(context.Background(), sdk.PackCommand{InputPath: req.Input, OutputPath: req.Output, CodebookPath: req.Codebook, EncryptionKey: req.Key, Concurrency: 4})
+	go comp.Pack(context.Background(), sdk.PackCommand{InputPath: req.Input, OutputPath: req.Output, CodebookPath: req.Codebook, EncryptionKey: req.Key, Concurrency: 4, Mode: req.Mode})
 	jsonResp(w, 200, APIResponse{Success: true, Message: "Pack started: " + req.Input})
 }
 

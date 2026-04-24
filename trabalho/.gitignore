@@ -1,0 +1,57 @@
+# ═══════════════════════════════════════════════════════════
+# GITIGNORE: trabalho/ — Laboratórios SRE do Crompressor
+# ═══════════════════════════════════════════════════════════
+
+# ── Binários CROM gerados (train/pack output) ──
+*.crom
+*.cromdb
+*.sqsh
+
+# ── SquashFS images sem extensão (ex: app_rust_env/base) ──
+app_*/base
+app_*/base_src/
+
+# ── Runtime VFS FUSE Cascading (montagens efêmeras) ──
+app_*/mnt/
+app_*/mnt_crom/
+app_*/mnt_ro/
+app_*/mnt_sqsh/
+app_*/merged/
+app_*/vfs_upper/
+app_*/vfs_work/
+app_*/_source/
+
+# Raiz trabalho/ (criados pelo TEMPLATE_launcher)
+vfs_upper/
+vfs_work/
+merged/
+mnt/
+mnt_crom/
+mnt_ro/
+
+# ── Logs de auditoria ──
+*.log
+app_*/logs/
+logs/
+
+# ── Minecraft (gerenciado separadamente) ──
+minecraft_client/
+minecraft_test/
+
+# ── Cópia interna do crompressor ──
+crompressor/
+
+# ── Backups SRE ──
+*.bak_sre
+*_pool.crom
+
+# ── Dados gerados pelos testes (binários temporários) ──
+*.bin
+*.sqlite
+*.tar.gz
+*.png
+
+# ── Diretórios de build temporário ──
+app_*/_train_data/
+app_*/_train_data.sqsh
+app_*/_db_base/

@@ -1,0 +1,24 @@
+# 🧱 Crompressor: Pesquisa - GitIgnore
+# Ignore generated artifacts and data directories universally within research
+results/
+brains/
+datasets/
+verify/
+
+# Ignore specific large file extensions and temporary files
+*.crom
+*.cromdb
+*.sqsh
+*.bin
+*.out
+*.log
+*.tmp
+*.dat
+dummy*
+
+# Never ignore gitkeeps (to preserve empty specific directories if needed)
+!.gitkeep
+
+# Specific research exclusions
+ia_llm/102-native_llm_humble_pc/bin/
+ia_llm/102-native_llm_humble_pc/models/

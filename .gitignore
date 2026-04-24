@@ -1,5 +1,7 @@
 # ═══ Binários ═══
 bin/
+crom
+crompressor_gui
 *.exe
 .go-tmp/
 
@@ -7,6 +9,11 @@ bin/
 testdata/mini.cromdb
 testdata/sample_*.bin
 /tmp/
+
+# ═══ Frontend (Node/React) ═══
+ui/node_modules/
+ui/dist/
+ui/.vite/
 
 # ═══ IDE ═══
 .idea/
@@ -34,3 +41,58 @@ coverage.out
 
 # ═══ Logs ═══
 *.log
+
+# ═══ SRE / Trabalho ═══
+trabalho/minecraft_client/tlauncher/
+trabalho/minecraft_client/vfs_output/
+trabalho/minecraft_test/world*/
+trabalho/minecraft_test/libraries/
+trabalho/minecraft_test/plugins/
+trabalho/minecraft_test/cache/
+trabalho/minecraft_test/logs/
+trabalho/minecraft_test/versions/
+trabalho/minecraft_test/*.json
+trabalho/minecraft_test/*.txt
+trabalho/minecraft_test/*.jar
+trabalho/crompressor/
+*.bak_sre
+*_pool.crom
+crompressor-novo
+
+# ═══ AI Artifacts ═══
+walkthrough.md
+task.md
+implementation_plan.md
+
+# ═══ Pesquisa: Artefatos Gerados (não versionáveis) ═══
+pesquisa/**/results/
+pesquisa/**/brains/
+pesquisa/**/datasets/
+pesquisa/**/verify/
+!pesquisa/**/results/.gitkeep
+!pesquisa/**/brains/.gitkeep
+dummy*
+*_output.bin
+
+# ═══ Pesquisa: Manter scripts, relatórios, Go sources e HTML ═══
+!pesquisa/**/*.sh
+!pesquisa/**/*.go
+!pesquisa/**/*.md
+!pesquisa/**/*.html
+!pesquisa/**/*.js
+!pesquisa/**/relatorio.md
+!pesquisa/index.md
+!pesquisa/run_all_audits.sh
+!pesquisa/setup_pesquisa.sh
+
+# ═══ Temporários de compilação WASM/cross ═══
+/tmp/crom_*
+
+# ═══ VFS CASCADING Runtime ═══
+vfs_upper/
+vfs_work/
+merged/
+mnt_crom/
+mnt_ro/
+mnt/
+_source/
