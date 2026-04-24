@@ -27,7 +27,7 @@ import (
 
 // PackOptions defines the compiler settings.
 type PackOptions struct {
-	Mode          string   // "edge" (lossy) ou "vault" (lossless, default)
+	Mode          string   // "edge" (lossy) or "archive" (lossless, default)
 	CodebookPaths []string // [0]=L3, [1]=L2, [2]=L1 (up to 3 supported)
 	Concurrency   int
 	EncryptionKey string // Passphrase for AES-256-GCM. If empty, no encryption.
@@ -61,7 +61,7 @@ type Metrics struct {
 // DefaultPackOptions returns sensible defaults.
 func DefaultPackOptions() PackOptions {
 	return PackOptions{
-		Mode:        "vault",
+		Mode:        "archive",
 		Concurrency: 4,
 		ChunkSize:   chunker.DefaultChunkSize,
 		UseCDC:      false,

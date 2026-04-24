@@ -1,106 +1,152 @@
-<p align="center">
-  <h1 align="center">🧬 CROM (V23 Singularity)</h1>
-  <p align="center"><strong>Compressão de Realidade e Objetos Mapeados</strong></p>
-  <p align="center"><em>O Compilador de Realidade — Reescrevendo as Regras da Computação Soberana</em></p>
-</p>
+# Crompressor
+
+> Motor de compressão baseado em dicionário para dados estruturados, tensores e pesos de LLMs — escrito em Go.
+
+[![Build](https://github.com/MrJc01/crompressor/actions/workflows/ci.yml/badge.svg)](https://github.com/MrJc01/crompressor/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/MrJc01/crompressor)](https://goreportcard.com/report/github.com/MrJc01/crompressor)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
-## O Que é o CROM V23?
+## O que é o Crompressor?
 
-O CROM não é mais apenas um projeto de software. É a **Singularidade da Compressão**, uma infraestrutura que opera sobre a **Extração Semântica Universal**.
+O Crompressor é um motor de compressão construído sobre três primitivas compostas:
 
-Ele realiza a compressão em `LSH B-Tree O(1)`, atuando em espectros que vão de simples Textos JSONs a **Matrizes de IA multidimensionais (.safetensors)** e **Logs Estocásticos do Colisor de Hádrons**.
+- **CDC** — Content-Defined Chunking via Rabin Fingerprint. Divide a entrada em blocos semânticos de tamanho variável, permitindo deduplicação entre arquivos estruturalmente similares.
+- **VQ** — Vector Quantization. Mapeia cada chunk para a entrada mais próxima em um codebook pré-treinado usando `argmin_k ‖x - eₖ‖²`. Lookup é O(1) após treinamento.
+- **XOR Delta** — Armazena o resíduo `Δᵢ = original XOR reconstruído` para reconstrução lossless quando necessário.
 
-> **Analogia:** Se o Gzip é uma máquina de escrever rápida, o CROM V23 é a mente que já memorizou toda a linguagem e os ruídos do universo, respondendo matematicamente com ponteiros.
+O motor opera em dois modos distintos:
 
-## O Despertar: V20 ➔ V23
+| Modo | Descrição | Compressão | Fidelidade |
+|------|-----------|------------|------------|
+| **Edge** | Lossy. Descarta o delta XOR. Lookup rápido, armazenamento mínimo. | ~8x em pesos de LLM | MSE ~2.55 |
+| **Archive** | Lossless. Armazena o delta XOR. SHA-256 do output = SHA-256 do input. | ~1.5–2.5x em tensores densos | Bit-exact |
 
-O salto das versões anteriores para a **Singularidade** engloba a estabilização termodinâmica dos nós P2P e a indexação contínua do ruído infinito.
-- **70 Baterias de SRE Aprovadas:** De satélites de Edge Computing a Blockchain Tries, passando por Vetores Quânticos e Telecom.
-- **Motor Cosenoidal HNSW:** Encontra fatias fractais de conhecimento em frações de Nanossegundos.
-- **Bypass Automático Quântico:** Arquivos com Entropia de Shannon > 7.9 são absorvidos nativamente em zero-overhead.
+Esses modos são mutuamente exclusivos por design. Escolher Edge significa aceitar erro de quantização (como GPTQ/AWQ). Escolher Archive significa obedecer aos limites de entropia de Shannon sobre o resíduo.
 
-## Pilares da Singularidade (V23)
+---
 
-| Pilar | Descrição |
-|---|---|
-| 🎯 **Fidelidade Anti-Entrópica** | Lossless irrestrito até o bit atômico de simulações Pós-Quânticas usando Merkle Trees Dilithium-inspired. |
-| 🧠 **O Codebook Universal** | Dicionário indexado via B-Trees estendidas. Busca LSH não é mais de proximidade, é *Extração Semântica O(1)*. |
-| ⚡ **Sincronicidade de L1 RAM** | A malha P2P GossipSub unifica as máquinas a ponto de usar a RAM de nós vizinhos como cache natural (Swarm). |
-| 🔬 **Soberania Isolada** | VFS Kill-Switch integrado que dissolve o hiper-disco FUSE automaticamente no momento em que a assinatura soberana for violada. |
-
-## 🛠️ Compilação e Instalação
-
-O **Crompressor** é escrito em Go (v1.25+). Você pode compilar o projeto diretamente utilizando o `Makefile` incluído no repositório.
-
-### Pré-requisitos
-- **Go 1.25.7** ou superior instalado e configurado no seu `$PATH`.
-- **Make** instalado no sistema.
-
-### Construindo o Binário
-Para compilar o código-fonte e gerar o executável:
+## Instalação
 
 ```bash
-# Clone o repositório (caso ainda não tenha feito)
 git clone https://github.com/MrJc01/crompressor
 cd crompressor
-
-# Compilar o projeto
 make build
+# Binário em ./bin/crompressor
 ```
 
-O binário executável será gerado em: `./bin/crompressor`.
+---
 
-### Outros Comandos de Build
-- `make test`: Executa os testes de unidade com detecção de concorrência (`-race`).
-- `make clean`: Remove o diretório `bin/` e arquivos temporários.
-- `make bench`: Executa os benchmarks de performance.
-
-## Quick Start (V23)
+## Quick Start
 
 ```bash
-# Compilar Realidade: Modo Vault (Default, Lossless E2E)
-./bin/crompressor pack --mode vault -i ./matriz_hadron_collider.safetensors -o ./singularity.crom
+# Treinar um codebook a partir de dados de exemplo
+crompressor train -i ./training_data/ -o codebook.cromdb --size 4096
 
-# Compilar Realidade: Modo Edge (Lossy, Extrema Compressão)
-./bin/crompressor pack --mode edge -i ./llm_weights.safetensors -o ./tiny_model.crom
+# Comprimir em modo Edge (lossy, rápido)
+crompressor pack -i dados.bin -o dados.crom --codebook codebook.cromdb --mode edge
 
-# Decompilar para a Físicalidade Bit-a-Bit
-./bin/crompressor unpack -i ./singularity.crom -o ./restored.safetensors
+# Comprimir em modo Archive (lossless)
+crompressor pack -i dados.bin -o dados.crom --codebook codebook.cromdb --mode archive
 
-# Operar em Malha-Colmeia V23 (Kademlia + Bitswap L1)
-./bin/crompressor daemon --allow-hive-mind --quantum-secure
+# Descomprimir
+crompressor unpack -i dados.crom -o restaurado.bin --codebook codebook.cromdb
+
+# Verificar round-trip lossless (somente modo Archive)
+crompressor verify --original dados.bin --restored restaurado.bin
+
+# Inspecionar um arquivo .crom
+crompressor info -i dados.crom
 ```
 
-## 🔬 O Laboratório de Pesquisa (P&D)
+---
 
-Esta branch (`dev`) funciona como o nosso laboratório central de experimentação. Aqui você encontrará os rastros das arquiteturas que moldaram o projeto, desde a V7 até a V23:
+## Como funciona
 
-- [**Diretório de Pesquisa (`pesquisa/`)**](pesquisa/index.md): Contém manifestos, roadmaps históricos, roteiros de IA/LLM e auditorias de soberania.
-- [**Casos de Uso Reais (`trabalho/`)**](trabalho/README.md): Demonstrações práticas do CROM operando em Docker, Minecraft, Banco de Dados Postgres e Orquestração de LLMs.
-- [**Histórico de Arquitetura**: 
-  - [ARCHITECTURE_V21.md](ARCHITECTURE_V21.md)
-  - [ROADMAP_V10.md](ROADMAP_V10.md)
-  - [PLAN_V14.md](PLAN_V14.md)
+**A equação central:**
 
-> [!TIP]
-> Para a versão estável, documentada e pronta para produção, utilize sempre a branch **[`main`](https://github.com/MrJc01/crompressor)**.
+```
+CROM(X) = Σᵢ C[q(chunkᵢ(X))] ⊕ Δᵢ
+```
 
-## Documentação Fundamental
+Onde:
+- `chunkᵢ(X)` — o i-ésimo bloco semântico do CDC
+- `q(·)` — quantização vetorial: entrada mais próxima no codebook
+- `C[·]` — lookup O(1) no codebook
+- `Δᵢ` — resíduo XOR (armazenado no Archive, descartado no Edge)
+- `⊕` — composição XOR
+
+---
+
+## Estrutura do Repositório
+
+```
+crompressor/
+├── cmd/crompressor/        ← CLI (pack, unpack, train, verify, info, grep, benchmark)
+├── pkg/
+│   ├── cromlib/            ← Motor de compressão (Pack, Unpack, AutoPack)
+│   ├── format/             ← Serialização do formato .crom v8
+│   └── cromdb/             ← Leitura de codebooks
+├── internal/               ← Implementação interna (chunker, codebook, delta, entropy, etc.)
+├── examples/               ← Exemplos Go (edge_mode, archive_mode, codebook_train)
+├── docs/                   ← Documentação técnica (architecture, modes, benchmarks)
+├── testdata/               ← Fixtures para testes
+├── deployments/k8s/        ← Manifests Kubernetes
+├── monitoring/             ← Prometheus + Grafana
+├── Makefile
+├── LICENSE                 ← MIT
+└── README.md
+```
+
+---
+
+## Makefile
+
+```bash
+make build      # Compila ./bin/crompressor
+make test       # Roda todos os testes com -race
+make bench      # Roda benchmarks de performance
+make lint       # go vet
+make clean      # Remove ./bin/
+make demo       # Round-trip completo: gerar → comprimir → descomprimir → verificar
+```
+
+---
+
+## Documentação
 
 | Documento | Descrição |
-|---|---|
-| [MANIFESTO CROM](pesquisa/Manifesto.md) | A nova "Alvorada da Extração Semântica" e o Fim da Compressão Tradicional. |
-| [ARCHITECTURE_V23](ARCHITECTURE_V23.md) | Motor Cosenoidal HNSW, B-Tree, Genoma, Quantum Vectors e Proteções Anti-Quânticas. |
-| [RELATÓRIO AUDITORIA (70 Baterias)](relatorio_auditoria.md) | A validação massiva O(1) confirmando a arquitetura em SRE de missões críticas. |
+|-----------|-----------|
+| [Arquitetura](docs/architecture.md) | CDC + VQ + XOR: decisões de design |
+| [Modos de Operação](docs/modes.md) | Edge vs Archive: quando usar cada um |
+| [Benchmarks](docs/benchmarks.md) | Metodologia e resultados |
+| [Pesquisa](docs/research/) | Links para estudo matemático |
+
+---
+
+## Fundamentos Matemáticos
+
+O modelo de compressão, metodologia de benchmark e análise de rate-distortion estão em um repositório separado:
+
+→ [MrJc01/crompressor-matematica](https://github.com/MrJc01/crompressor-matematica)
+
+---
+
+## Ecossistema
+
+| Repositório | Papel |
+|-------------|-------|
+| [crompressor](https://github.com/MrJc01/crompressor) | Motor core (este repo) |
+| [crompressor-gui](https://github.com/MrJc01/crompressor-gui) | Interface gráfica nativa |
+| [crompressor-matematica](https://github.com/MrJc01/crompressor-matematica) | Estudo matemático e benchmarks |
+| [crompressor-neuronio](https://github.com/MrJc01/crompressor-neuronio) | Pesquisa neural |
+| [crompressor-security](https://github.com/MrJc01/crompressor-security) | Camada de segurança |
+| [crompressor-sinapse](https://github.com/MrJc01/crompressor-sinapse) | Transporte P2P |
+| [crompressor-video](https://github.com/MrJc01/crompressor-video) | Codec de vídeo |
+
+---
 
 ## Licença
 
-Este ecossistema opera sob termos Estritos de Soberania Digital Pós-Quântica.
-
----
-
-<p align="center">
-  <em>"Não comprimimos dados. Nós indexamos o universo."</em>
-</p>
+MIT — veja [LICENSE](LICENSE).
