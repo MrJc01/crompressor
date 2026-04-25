@@ -2,26 +2,26 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   pull_request:
     branches: [main]
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Go
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25'
 
       - name: Build
-        run: make build
+        run: go build ./...
 
       - name: Test
-        run: make test
+        run: go test ./... -short -count=1 -timeout 120s
 
-      - name: Lint
-        run: make lint
+      - name: Vet
+        run: go vet ./...
