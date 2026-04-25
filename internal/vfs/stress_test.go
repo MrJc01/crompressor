@@ -214,7 +214,7 @@ func openRandomReader(t *testing.T, cromFile, codebookPath, password string) *Ra
 		t.Fatalf("read metadata: %v", err)
 	}
 
-	rr, err := NewRandomReader(f, info.Size(), header, blockTable, entries, cb, password)
+	rr, err := NewRandomReader(f, info.Size(), header, blockTable, entries, cb, password, 256)
 	if err != nil {
 		t.Fatalf("new random reader: %v", err)
 	}
