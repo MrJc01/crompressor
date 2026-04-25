@@ -98,10 +98,12 @@ func NewCromNode(codebookPath string, listenPort int, dataDir string, encKey str
 	// 5. Setup Protocol Handlers
 	node.setupSovereigntyAuth()
 
-	// 6. Start Discovery (mDNS)
-	if err := node.setupDiscovery(); err != nil {
-		cancel()
-		return nil, fmt.Errorf("network: setup discovery: %w", err)
+	// 6. Start Discovery (mDNS) - Disabled during tests to prevent auth races
+	if os.Getenv("CROM_TEST_DISABLE_MDNS") != "1" {
+		if err := node.setupDiscovery(); err != nil {
+			cancel()
+			return nil, fmt.Errorf("network: setup discovery: %w", err)
+		}
 	}
 
 	// 7. Start GossipSub (Announcements)

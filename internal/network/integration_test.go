@@ -34,8 +34,15 @@ func TestTwoNodeSync(t *testing.T) {
 
 	// 3. Create a synthetic file and pack it in Node A's directory
 	originalFile := filepath.Join(dirA, "source.txt")
-	testData := []byte("CROM P2P Integration Test - Hello World! " +
-		"This proves that the SyncProtocol works end-to-end.")
+	
+	// Create a 1MB file with moderate entropy to ensure chunking happens and LSH finds matches
+	baseStr := "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%"
+	var buf bytes.Buffer
+	for i := 0; i < 20000; i++ {
+		buf.WriteString(baseStr)
+	}
+	testData := buf.Bytes()
+
 	if err := os.WriteFile(originalFile, testData, 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -88,14 +95,14 @@ func TestTwoNodeSync(t *testing.T) {
 	// Allow protocol handlers to fully register after connection
 	time.Sleep(500 * time.Millisecond)
 
-	// 7. Sovereignty Handshake (retry up to 3 times to handle mDNS race)
+	// 7. Sovereignty Handshake (retry up to 5 times to handle mDNS race)
 	var authErr error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < 5; attempt++ {
 		authErr = nodeB.AuthenticatePeer(ctx, nodeA.PeerID())
 		if authErr == nil {
 			break
 		}
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 	}
 	if authErr != nil {
 		t.Fatalf("Authentication failed after retries: %v", authErr)

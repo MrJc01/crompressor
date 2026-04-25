@@ -398,8 +398,8 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 							}
 						}
 
-						if opts.Mode != "edge" && (chunkEntropy > 3.00 || entropy.DetectHeuristicBypass(chunkEntropy, chunk.Data)) {
-							// Passthrough High-Entropy Chunk (Treat as Literal immediately)
+						if opts.Mode != "edge" && (chunkEntropy > 7.8 || entropy.DetectHeuristicBypass(chunkEntropy, chunk.Data)) {
+							// Passthrough High-Entropy Chunk (Treat as Literal immediately — Shannon limit)
 							results[i] = processedChunk{
 								res: chunk.Data,
 								sim: 0.0, // Irrelevant for literals
@@ -445,7 +445,9 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 									dynamicPatchThreshold = 0.95
 								}
 								
-								if sim < 0.20 && opts.Mode != "edge" {
+								if sim == 1.0 {
+									bestRes = []byte{} // EXACT MATCH: Deduplication! No delta needed.
+								} else if sim < 0.20 && opts.Mode != "edge" {
 									bestRes = chunk.Data
 									bestCodeID = format.LiteralCodebookID
 									bestCbIdx = format.LiteralCodebookIndex
@@ -539,6 +541,8 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 					h64.Write(res.res)
 					literalFreq[h64.Sum64()]++
 
+				} else if res.entry.DeltaSize == 0 && res.entry.CodebookID != format.LiteralCodebookID {
+					hitCount++ // EXACT MATCH!
 				} else if res.entry.DeltaSize > 0 {
 					zeroes := 0
 					for _, b := range res.res {

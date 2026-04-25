@@ -3,7 +3,6 @@ package fractalmath
 import (
 	"bytes"
 	"crypto/rand"
-	"fmt"
 	"math/big"
 	"time"
 )
