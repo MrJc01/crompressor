@@ -83,9 +83,9 @@ const (
 	// Prevents OOM attacks from forged V8 headers. (32 MiB)
 	MaxMicroDictSize uint32 = 32 * 1024 * 1024
 
-	// ChunksPerBlock is the number of chunks grouped into a single Zstd frame in V2.
-	// Must match cromlib.BlockSize / chunker.DefaultChunkSize = 16MB / 128B = 131072.
-	ChunksPerBlock = 131072
+	// BlockSize is how many original bytes go into each Zstd frame (V2+). Only the
+	// last block may be shorter, so block boundaries do not depend on the chunk size.
+	BlockSize = 16 * 1024 * 1024
 
 	// FlagIsPatch is applied to CodebookID (bit 60) to indicate the residual is a Micro-Patch (MyersDiff) instead of XOR.
 	FlagIsPatch uint64 = 1 << 60
@@ -102,6 +102,7 @@ type Header struct {
 	IsEncrypted           bool
 	IsPassthrough         bool
 	IsConvergentEncrypted bool
+	IsLossy               bool // Packed in edge mode: the output will not match OriginalHash
 	Salt                  [16]byte
 	OriginalHash          [HashSize]byte
 	OriginalSize          uint64
@@ -151,7 +152,38 @@ func ParseV9MutationHeader(data []byte) (*V9MutationHeader, error) {
 
 // NumBlocks returns the expected number of Zstd blocks for this file (V2+).
 func (h *Header) NumBlocks() uint32 {
-	return (h.ChunkCount + ChunksPerBlock - 1) / ChunksPerBlock
+	if h.ChunkCount == 0 {
+		return 0
+	}
+	if h.OriginalSize == 0 {
+		return 1
+	}
+	return uint32((h.OriginalSize + BlockSize - 1) / BlockSize)
+}
+
+// BlockStarts returns the index of the first chunk of each block.
+func BlockStarts(entries []ChunkEntry) []int {
+	var starts []int
+	var filled uint64
+	for i, e := range entries {
+		if filled == 0 {
+			starts = append(starts, i)
+		}
+		filled += uint64(e.OriginalSize)
+		if filled >= BlockSize {
+			filled = 0
+		}
+	}
+	return starts
+}
+
+// BlockRange returns the [start, end) chunk indexes of block i.
+func BlockRange(starts []int, i, numEntries int) (int, int) {
+	end := numEntries
+	if i+1 < len(starts) {
+		end = starts[i+1]
+	}
+	return starts[i], end
 }
 
 // ChunkEntry represents a single chunk mapping in the Chunk Table.
@@ -201,7 +233,8 @@ func ParseHeader(data []byte) (*Header, error) {
 		}
 		h.IsEncrypted = data[6] == 1
 		if h.Version >= Version3 {
-			h.IsPassthrough = data[7] == 1
+			h.IsPassthrough = data[7]&1 != 0
+			h.IsLossy = data[7]&2 != 0
 		}
 		copy(h.Salt[:], data[8:24])
 		copy(h.OriginalHash[:], data[24:56])
@@ -277,7 +310,10 @@ func (h *Header) Serialize() []byte {
 		buf[6] = 1
 	}
 	if h.IsPassthrough {
-		buf[7] = 1
+		buf[7] |= 1
+	}
+	if h.IsLossy {
+		buf[7] |= 2
 	}
 	copy(buf[8:24], h.Salt[:])
 	copy(buf[24:56], h.OriginalHash[:])

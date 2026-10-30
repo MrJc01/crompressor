@@ -27,13 +27,14 @@ type UnpackOptions struct {
 func DefaultUnpackOptions() UnpackOptions {
 	return UnpackOptions{
 		Fuzziness: 0.0,
-		Strict:    false,
+		Strict:    true,
 	}
 }
 
 // Unpack reads a .crom file, extracts the deltas, looks up the codewords,
 // rebuilds the original file directly to disk via streaming to prevent memory overflow.
-func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) error {
+// The output only appears at outputPath after it passes the integrity check.
+func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) (err error) {
 	start := time.Now()
 
 	cb, err := codebook.Open(codebookPath)
@@ -54,15 +55,28 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 		return fmt.Errorf("unpack: parse format: %w", err)
 	}
 
-	outFile, err := os.Create(outputPath)
+	tmpPath := outputPath + ".tmp"
+	outFile, err := os.Create(tmpPath)
 	if err != nil {
 		return fmt.Errorf("unpack: open output file: %w", err)
 	}
-	defer outFile.Close()
+	defer func() {
+		outFile.Close()
+		if err != nil {
+			os.Remove(tmpPath)
+			return
+		}
+		err = os.Rename(tmpPath, outputPath)
+	}()
+
+	if header.IsLossy {
+		fmt.Printf("⚠ Lossy file (edge mode): the output will not match the original.\n")
+		opts.Fuzziness = -1
+	}
 
 	hasher := sha256.New()
 	var writeOut func([]byte) error
-	if opts.Fuzziness > 0.0 {
+	if opts.Fuzziness != 0.0 {
 		// In variational mode, don't check hash
 		writeOut = func(b []byte) error { _, e := outFile.Write(b); return e }
 	} else {
@@ -117,6 +131,10 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 
 		currentGlobalOffset := uint64(0)
 		entryIdx := 0
+		blockStarts := format.BlockStarts(entries)
+		if len(blockStarts) != len(blockTable) {
+			return fmt.Errorf("unpack: chunk table describes %d blocks, block table has %d", len(blockStarts), len(blockTable))
+		}
 
 		// Stream block by block
 		for i, blockSize := range blockTable {
@@ -151,7 +169,7 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 				corruptBlocks++
 				
 				// Advance state to the next block
-				nextBlockIdx := (i + 1) * format.ChunksPerBlock
+				_, nextBlockIdx := format.BlockRange(blockStarts, i, len(entries))
 				if nextBlockIdx < len(entries) {
 					currentGlobalOffset = entries[nextBlockIdx].DeltaOffset
 				}
@@ -172,11 +190,8 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 			blockEndOffset := currentGlobalOffset + uint64(len(uncompressedBlock))
 			
 			// Process the exact constant number of chunks that belong to this block
-			chunksInThisBlock := format.ChunksPerBlock
-			if i == len(blockTable)-1 {
-				// Special case for last block which might be smaller
-				chunksInThisBlock = int(header.ChunkCount) - (i * format.ChunksPerBlock)
-			}
+			blockStart, blockEnd := format.BlockRange(blockStarts, i, len(entries))
+			chunksInThisBlock := blockEnd - blockStart
 			
 			for count := 0; count < chunksInThisBlock && entryIdx < len(entries); count++ {
 				entry := entries[entryIdx]
@@ -307,7 +322,7 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) erro
 				return fmt.Errorf("unpack: SECURITY/INTEGRITY FAILURE: reconstructed SHA-256 does not match original")
 			}
 		}
-	} else {
+	} else if opts.Fuzziness > 0.0 {
 		fmt.Printf("⚠ VARIATIONAL MODE ACTIVE (Fuzziness: %.2f)\n", opts.Fuzziness)
 	}
 

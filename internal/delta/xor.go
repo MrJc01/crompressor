@@ -38,6 +38,11 @@ func Apply(pattern []byte, delta []byte) []byte {
 	nDelta := len(delta)
 	nPat := len(pattern)
 
+	// An empty delta means the chunk is the pattern itself (exact match or lossy mode).
+	if nDelta == 0 {
+		return append([]byte(nil), pattern...)
+	}
+
 	original := make([]byte, nDelta)
 	for i := 0; i < nDelta; i++ {
 		if i < nPat {

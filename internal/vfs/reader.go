@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"sync"
 
-	"github.com/MrJc01/crompressor/internal/chunker"
 	"github.com/MrJc01/crompressor/internal/codebook"
 	"github.com/MrJc01/crompressor/internal/crypto"
 	"github.com/MrJc01/crompressor/internal/delta"
@@ -22,6 +22,8 @@ type RandomReader struct {
 	blockTable   []uint32
 	blockOffsets []int64 // precalculated absolute offsets in the .crom file
 	entries      []format.ChunkEntry
+	blockStarts  []int    // first chunk of each block
+	chunkEnds    []uint64 // original offset where each chunk ends
 	cb           *codebook.Reader
 	memCache     *MemoryCache
 	derivedKey   []byte
@@ -85,6 +87,14 @@ func NewRandomReader(f io.ReaderAt, fileSize int64, header *format.Header, block
 	}
 	rr.dataOffset = baseOffset
 
+	rr.blockStarts = format.BlockStarts(rr.entries)
+	rr.chunkEnds = make([]uint64, len(rr.entries))
+	var end uint64
+	for i, e := range rr.entries {
+		end += uint64(e.OriginalSize)
+		rr.chunkEnds[i] = end
+	}
+
 	return rr, nil
 }
 
@@ -110,19 +120,17 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 
 	for bytesRead < int(bytesToRead) {
 		currentOff := off + int64(bytesRead)
-		cSize := int64(rr.header.ChunkSize)
-		if cSize == 0 {
-			cSize = int64(chunker.DefaultChunkSize)
-		}
-		chunkIndex := currentOff / cSize
-		chunkOffset := currentOff % cSize
-
+		// Chunks may have different sizes, so locate this one by its original offset.
+		chunkIndex := int64(sort.Search(len(rr.entries), func(i int) bool {
+			return rr.chunkEnds[i] > uint64(currentOff)
+		}))
 		if chunkIndex >= int64(len(rr.entries)) {
 			break
 		}
+		chunkOffset := currentOff - int64(rr.chunkEnds[chunkIndex]) + int64(rr.entries[chunkIndex].OriginalSize)
 
 		entry := rr.entries[chunkIndex]
-		blockID := uint32(chunkIndex / format.ChunksPerBlock)
+		blockID := uint32(sort.SearchInts(rr.blockStarts, int(chunkIndex)+1) - 1)
 
 		// ===========================
 		// 🚀 L2 CHUNK CACHE BYPASS
@@ -144,7 +152,7 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 			}
 	
 			// Calculate localized block start offset
-			blockStartChunkIdx := int64(blockID) * int64(format.ChunksPerBlock)
+			blockStartChunkIdx := int64(rr.blockStarts[blockID])
 			blockStartGlobalOffset := rr.entries[blockStartChunkIdx].DeltaOffset
 	
 			entryLocalOffset := entry.DeltaOffset - blockStartGlobalOffset

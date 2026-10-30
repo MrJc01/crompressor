@@ -3,6 +3,7 @@ package cromlib
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"time"
 
@@ -54,9 +55,8 @@ func PackBytes(input []byte, codebookData []byte, opts PackOptions) ([]byte, *Me
 
 	searcher := search.NewLSHSearcher(cb)
 
-	// 3. Chunk the input
-	fc := chunker.NewFixedChunker(chunkSize)
-	chunks := fc.Split(input)
+	// Chunks must have the size of the codewords to match them exactly.
+	chunkSize = int(cb.CodewordSize())
 
 	originalSize := uint64(len(input))
 	originalHash := sha256.Sum256(input)
@@ -70,86 +70,116 @@ func PackBytes(input []byte, codebookData []byte, opts PackOptions) ([]byte, *Me
 	var literalCount int
 	var totalSimilarity float64
 
-	for _, chunk := range chunks {
-		chunkEntropy := entropy.Shannon(chunk.Data)
-
-		// High entropy bypass in archive mode
-		if opts.Mode != "edge" && chunkEntropy > 3.00 {
-			entries = append(entries, format.ChunkEntry{
-				CodebookID:   format.LiteralCodebookID,
-				CodebookIndex: format.LiteralCodebookIndex,
-				DeltaOffset:  currentOffset,
-				DeltaSize:    uint32(len(chunk.Data)),
-				OriginalSize: uint32(chunk.Size),
-			})
-			deltaPool = append(deltaPool, chunk.Data...)
-			currentOffset += uint64(len(chunk.Data))
-			literalCount++
-			continue
-		}
-
-		match, err := searcher.FindBestMatch(chunk.Data)
-		if err != nil {
-			// No match — store as literal
-			entries = append(entries, format.ChunkEntry{
-				CodebookID:   format.LiteralCodebookID,
-				CodebookIndex: format.LiteralCodebookIndex,
-				DeltaOffset:  currentOffset,
-				DeltaSize:    uint32(len(chunk.Data)),
-				OriginalSize: uint32(chunk.Size),
-			})
-			deltaPool = append(deltaPool, chunk.Data...)
-			currentOffset += uint64(len(chunk.Data))
-			literalCount++
-			continue
-		}
-
-		chunkBits := len(chunk.Data) * 8
-		sim := match.Similarity(chunkBits)
-		totalSimilarity += sim
-
-		usablePattern := match.Pattern
-		if len(usablePattern) > len(chunk.Data) {
-			usablePattern = usablePattern[:len(chunk.Data)]
-		}
-
-		var residual []byte
-		codeID := match.CodebookID
-
-		if sim < 0.20 && opts.Mode != "edge" {
-			residual = chunk.Data
-			codeID = format.LiteralCodebookID
-			literalCount++
-		} else if opts.Mode == "edge" {
-			residual = []byte{} // Lossy: discard delta
-		} else {
-			residual = delta.XOR(chunk.Data, usablePattern)
-		}
-
-		if sim >= 0.95 {
-			hitCount++
-		}
-
-		entries = append(entries, format.ChunkEntry{
-			CodebookID:   codeID,
-			CodebookIndex: 0,
-			DeltaOffset:  currentOffset,
-			DeltaSize:    uint32(len(residual)),
-			OriginalSize: uint32(chunk.Size),
-		})
-		deltaPool = append(deltaPool, residual...)
-		currentOffset += uint64(len(residual))
+	// 3. Chunk and encode the input, one Zstd frame per block
+	var fc chunker.Chunker = chunker.NewFixedChunker(chunkSize)
+	if chunkSize >= search.AlignedMinCodewordSize {
+		fc = search.NewAlignedChunker(cb)
 	}
+	var blocks [][]byte
 
-	// 5. Compress the delta pool
-	compressedPool, err := delta.CompressPool(deltaPool)
-	if err != nil {
-		return nil, nil, fmt.Errorf("packbytes: compress pool: %w", err)
+	for blockStart := 0; blockStart < len(input); blockStart += BlockSize {
+		blockEnd := blockStart + BlockSize
+		if blockEnd > len(input) {
+			blockEnd = len(input)
+		}
+		deltaPool = nil
+		for _, chunk := range fc.Split(input[blockStart:blockEnd]) {
+			// The receiver already has this chunk: only its ID travels.
+			if id, ok := searcher.FindExact(chunk.Data); ok {
+				entries = append(entries, format.ChunkEntry{
+					CodebookID:   id,
+					DeltaOffset:  currentOffset,
+					OriginalSize: uint32(chunk.Size),
+				})
+				hitCount++
+				totalSimilarity++
+				continue
+			}
+
+			chunkEntropy := entropy.Shannon(chunk.Data)
+
+			// High entropy bypass in archive mode
+			if opts.Mode != "edge" && chunkEntropy > 7.8 {
+				entries = append(entries, format.ChunkEntry{
+					CodebookID:   format.LiteralCodebookID,
+					CodebookIndex: format.LiteralCodebookIndex,
+					DeltaOffset:  currentOffset,
+					DeltaSize:    uint32(len(chunk.Data)),
+					OriginalSize: uint32(chunk.Size),
+				})
+				deltaPool = append(deltaPool, chunk.Data...)
+				currentOffset += uint64(len(chunk.Data))
+				literalCount++
+				continue
+			}
+
+			match, err := searcher.FindBestMatch(chunk.Data)
+			if err != nil {
+				// No match — store as literal
+				entries = append(entries, format.ChunkEntry{
+					CodebookID:   format.LiteralCodebookID,
+					CodebookIndex: format.LiteralCodebookIndex,
+					DeltaOffset:  currentOffset,
+					DeltaSize:    uint32(len(chunk.Data)),
+					OriginalSize: uint32(chunk.Size),
+				})
+				deltaPool = append(deltaPool, chunk.Data...)
+				currentOffset += uint64(len(chunk.Data))
+				literalCount++
+				continue
+			}
+
+			chunkBits := len(chunk.Data) * 8
+			sim := match.Similarity(chunkBits)
+			totalSimilarity += sim
+
+			usablePattern := match.Pattern
+			if len(usablePattern) > len(chunk.Data) {
+				usablePattern = usablePattern[:len(chunk.Data)]
+			}
+
+			var residual []byte
+			codeID := match.CodebookID
+
+			if bytes.Equal(chunk.Data, usablePattern) {
+				residual = []byte{}
+			} else if sim < minNearMatchSimilarity && opts.Mode != "edge" {
+				residual = chunk.Data
+				codeID = format.LiteralCodebookID
+				literalCount++
+			} else if opts.Mode == "edge" {
+				residual = []byte{} // Lossy: discard delta
+			} else {
+				residual = delta.XOR(chunk.Data, usablePattern)
+			}
+
+			if sim >= 0.95 {
+				hitCount++
+			}
+
+			entries = append(entries, format.ChunkEntry{
+				CodebookID:   codeID,
+				CodebookIndex: 0,
+				DeltaOffset:  currentOffset,
+				DeltaSize:    uint32(len(residual)),
+				OriginalSize: uint32(chunk.Size),
+			})
+			deltaPool = append(deltaPool, residual...)
+			currentOffset += uint64(len(residual))
+		}
+
+
+		compressedPool, err := delta.CompressPool(deltaPool)
+		if err != nil {
+			return nil, nil, fmt.Errorf("packbytes: compress pool: %w", err)
+		}
+		blocks = append(blocks, compressedPool)
 	}
 
 	// 6. Build the .crom binary in memory
 	header := &format.Header{
-		Version:      format.Version2,
+		Version:      format.Version5,
+		IsLossy:      opts.Mode == "edge",
 		OriginalSize: originalSize,
 		ChunkCount:   uint32(len(entries)),
 		ChunkSize:    uint32(chunkSize),
@@ -164,20 +194,21 @@ func PackBytes(input []byte, codebookData []byte, opts PackOptions) ([]byte, *Me
 	// Header
 	buf.Write(header.Serialize())
 
-	// Block table (single block for in-memory)
-	blockSizeBytes := make([]byte, 4)
-	blockSizeBytes[0] = byte(len(compressedPool))
-	blockSizeBytes[1] = byte(len(compressedPool) >> 8)
-	blockSizeBytes[2] = byte(len(compressedPool) >> 16)
-	blockSizeBytes[3] = byte(len(compressedPool) >> 24)
-	buf.Write(blockSizeBytes)
+	// Block table
+	for _, block := range blocks {
+		if err := binary.Write(&buf, binary.LittleEndian, uint32(len(block))); err != nil {
+			return nil, nil, err
+		}
+	}
 
 	// Chunk table
 	tableData := format.SerializeChunkTable(entries, header.Version)
 	buf.Write(tableData)
 
 	// Compressed delta pool
-	buf.Write(compressedPool)
+	for _, block := range blocks {
+		buf.Write(block)
+	}
 
 	packedSize := uint64(buf.Len())
 	duration := time.Since(start)

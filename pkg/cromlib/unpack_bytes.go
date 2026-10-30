@@ -72,6 +72,10 @@ func UnpackBytes(cromData []byte, codebookData []byte, opts UnpackOptions) ([]by
 
 		currentGlobalOffset := uint64(0)
 		entryIdx := 0
+		blockStarts := format.BlockStarts(entries)
+		if len(blockStarts) != len(blockTable) {
+			return nil, fmt.Errorf("unpackbytes: chunk table describes %d blocks, block table has %d", len(blockStarts), len(blockTable))
+		}
 
 		for i, blockSize := range blockTable {
 			blockData := make([]byte, blockSize)
@@ -94,10 +98,8 @@ func UnpackBytes(cromData []byte, codebookData []byte, opts UnpackOptions) ([]by
 
 			blockEndOffset := currentGlobalOffset + uint64(len(uncompressedBlock))
 
-			chunksInThisBlock := format.ChunksPerBlock
-			if i == len(blockTable)-1 {
-				chunksInThisBlock = int(header.ChunkCount) - (i * format.ChunksPerBlock)
-			}
+			blockStart, blockEnd := format.BlockRange(blockStarts, i, len(entries))
+			chunksInThisBlock := blockEnd - blockStart
 
 			for count := 0; count < chunksInThisBlock && entryIdx < len(entries); count++ {
 				entry := entries[entryIdx]
@@ -143,7 +145,7 @@ func UnpackBytes(cromData []byte, codebookData []byte, opts UnpackOptions) ([]by
 	}
 
 	// 5. Integrity check
-	if opts.Fuzziness == 0.0 {
+	if opts.Fuzziness == 0.0 && !header.IsLossy {
 		reconstructedHash := sha256.Sum256(output.Bytes())
 		if reconstructedHash != header.OriginalHash {
 			return nil, fmt.Errorf("unpackbytes: SHA-256 integrity mismatch")

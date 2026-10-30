@@ -2,6 +2,7 @@ package cromlib
 
 import (
 	"bytes"
+	"sort"
 	"fmt"
 	"io"
 	"os"
@@ -111,6 +112,7 @@ func Grep(target string, inputPath string, codebookPath string) error {
 	// 4. Scan ChunkTable (O(1) payload decompression!)
 	fmt.Printf("\n🔍 Varrendo Matrix de Chunks (%d referências verticais)...\n", header.ChunkCount)
 	matchCount := 0
+	blockStarts := format.BlockStarts(entries)
 
 	// Cache de blocos descompactados SOB DEMANDA
 	blockCache := make(map[uint32][]byte)
@@ -124,7 +126,7 @@ func Grep(target string, inputPath string, codebookPath string) error {
 
 			// Conditional Materialization
 			if matchCount <= 20 {
-				blockIdx := uint32(i / format.ChunksPerBlock)
+				blockIdx := uint32(sort.SearchInts(blockStarts, i+1) - 1)
 				
 				// Lazy Load Block ONLY if it is not cached
 				pool, cached := blockCache[blockIdx]
@@ -142,7 +144,7 @@ func Grep(target string, inputPath string, codebookPath string) error {
 				}
 
 				if pool != nil {
-					blockStartChunkIdx := int64(blockIdx) * int64(format.ChunksPerBlock)
+					blockStartChunkIdx := int64(blockStarts[blockIdx])
 					blockStartGlobalOffset := entries[blockStartChunkIdx].DeltaOffset
 					localOffset := entry.DeltaOffset - blockStartGlobalOffset
 

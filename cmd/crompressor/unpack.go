@@ -54,7 +54,7 @@ func unpackCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Codebook path (.cromdb)")
 	cmd.Flags().Float64Var(&fuzziness, "fuzziness", 0.0, "Reconstruction variance (0 = lossless)")
 	cmd.Flags().StringVar(&encryptionKey, "encrypt", "", "Passphrase for AES-256-GCM decryption")
-	cmd.Flags().BoolVar(&strict, "strict", false, "Abort unpacking on any corrupted block")
+	cmd.Flags().BoolVar(&strict, "strict", true, "Abort on any corrupted block; --strict=false keeps a damaged output")
 
 	return cmd
 }

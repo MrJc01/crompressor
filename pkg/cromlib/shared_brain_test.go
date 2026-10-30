@@ -1,0 +1,177 @@
+package cromlib
+
+import (
+	"bytes"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/MrJc01/crompressor/internal/trainer"
+)
+
+// trainBrain builds a 4 KB brain over data, like two users sharing a Cérebro.
+func trainBrain(t *testing.T, dir string, data []byte) string {
+	t.Helper()
+	trainDir := filepath.Join(dir, "train")
+	os.MkdirAll(trainDir, 0755)
+	if err := os.WriteFile(filepath.Join(trainDir, "v1.bin"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	opts := trainer.DefaultTrainOptions()
+	opts.InputDir = trainDir
+	opts.OutputPath = filepath.Join(dir, "brain.cromdb")
+	opts.ChunkSize = 4096
+	opts.MaxCodewords = 20000
+	if _, err := trainer.Train(opts); err != nil {
+		t.Fatal(err)
+	}
+	return opts.OutputPath
+}
+
+func randomBytes(n int) []byte {
+	data := make([]byte, n)
+	rand.New(rand.NewSource(7)).Read(data)
+	return data
+}
+
+// packRoundTrip returns the packed size and fails unless the output is identical.
+func packRoundTrip(t *testing.T, dir, brain string, data []byte) int64 {
+	t.Helper()
+	in := filepath.Join(dir, "in.bin")
+	packed := filepath.Join(dir, "in.crom")
+	out := filepath.Join(dir, "out.bin")
+	if err := os.WriteFile(in, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	opts := DefaultPackOptions()
+	if _, err := Pack(in, packed, brain, opts); err != nil {
+		t.Fatal(err)
+	}
+	if err := Unpack(packed, out, brain, DefaultUnpackOptions()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, data) {
+		t.Fatal("restored file differs from the original")
+	}
+	info, err := os.Stat(packed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info.Size()
+}
+
+// Random data proves the savings come from the brain and not from zstd.
+func TestSharedBrainSendsOnlyReferences(t *testing.T) {
+	dir := t.TempDir()
+	data := randomBytes(2 * 1024 * 1024)
+	brain := trainBrain(t, dir, data)
+
+	const metadataPerChunk = 40 // table entry plus a margin for the header
+	limit := int64(len(data)/4096)*metadataPerChunk + 1024
+
+	if size := packRoundTrip(t, dir, brain, data); size > limit {
+		t.Errorf("identical file: %d bytes, want at most %d", size, limit)
+	}
+
+	shifted := append([]byte("X"), data...)
+	if size := packRoundTrip(t, dir, brain, shifted); size > limit+8192 {
+		t.Errorf("file with an inserted byte: %d bytes, want at most %d", size, limit+8192)
+	}
+
+	edited := append([]byte(nil), data...)
+	edited[len(edited)/2] ^= 0xff
+	if size := packRoundTrip(t, dir, brain, edited); size > limit+8192 {
+		t.Errorf("file with an edited byte: %d bytes, want at most %d", size, limit+8192)
+	}
+}
+
+// Blocks hold 16 MB of input whatever the chunk size, so large files must survive.
+func TestRoundTripAcrossBlocksWithLargeChunks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("large file")
+	}
+	dir := t.TempDir()
+	data := randomBytes(BlockSize + BlockSize/2)
+	brain := trainBrain(t, dir, data[:1024*1024])
+	packRoundTrip(t, dir, brain, data)
+}
+
+func TestUnknownDataStillRoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	brain := trainBrain(t, dir, randomBytes(256*1024))
+	text := bytes.Repeat([]byte("linha de log que o cerebro nunca viu\n"), 20000)
+	packRoundTrip(t, dir, brain, text)
+}
+
+func TestFailedIntegrityLeavesNoOutput(t *testing.T) {
+	dir := t.TempDir()
+	data := randomBytes(1024 * 1024)
+	brain := trainBrain(t, dir, data)
+	otherDir := filepath.Join(dir, "other")
+	os.MkdirAll(otherDir, 0755)
+	otherBrain := trainBrain(t, otherDir, bytes.Repeat(randomBytes(4096*4), 10)[1:])
+
+	packRoundTrip(t, dir, brain, data)
+	out := filepath.Join(dir, "wrong.bin")
+	if err := Unpack(filepath.Join(dir, "in.crom"), out, otherBrain, DefaultUnpackOptions()); err == nil {
+		t.Fatal("unpack with the wrong brain should fail")
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Error("output file must not exist after a failed integrity check")
+	}
+	if _, err := os.Stat(out + ".tmp"); !os.IsNotExist(err) {
+		t.Error("temporary output must be removed after a failed integrity check")
+	}
+}
+
+func TestEdgeModeRestoresLossyOutput(t *testing.T) {
+	dir := t.TempDir()
+	data := randomBytes(64 * 1024)
+	brain := trainBrain(t, dir, data)
+	in := filepath.Join(dir, "edge.bin")
+	edited := append([]byte(nil), data...)
+	edited[100] ^= 0xff
+	os.WriteFile(in, edited, 0644)
+
+	opts := DefaultPackOptions()
+	opts.Mode = "edge"
+	packed := filepath.Join(dir, "edge.crom")
+	if _, err := Pack(in, packed, brain, opts); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "edge.out")
+	if err := Unpack(packed, out, brain, DefaultUnpackOptions()); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(out); err != nil || info.Size() != int64(len(data)) {
+		t.Fatalf("edge output: %v, %v", info, err)
+	}
+}
+
+func TestPackBytesWithSharedBrain(t *testing.T) {
+	dir := t.TempDir()
+	data := randomBytes(1024 * 1024)
+	brainData, err := os.ReadFile(trainBrain(t, dir, data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	packed, _, err := PackBytes(data, brainData, DefaultPackOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(packed) > len(data)/50 {
+		t.Errorf("packed to %d bytes, want references only", len(packed))
+	}
+	restored, err := UnpackBytes(packed, brainData, DefaultUnpackOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(restored, data) {
+		t.Fatal("restored bytes differ")
+	}
+}

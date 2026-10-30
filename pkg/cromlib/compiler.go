@@ -2,6 +2,7 @@
 package cromlib
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
@@ -83,7 +84,12 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 }
 
 // Memory block size to process per batch (16 MB)
-const BlockSize = 16 * 1024 * 1024
+const BlockSize = format.BlockSize
+
+// minNearMatchSimilarity is the bit similarity below which XOR against a pattern
+// is not worth it: unrelated text already shares about 75-80% of its bits, and
+// that XOR hides from zstd the structure it would have compressed.
+const minNearMatchSimilarity = 0.90
 
 // Pack reads an input file iteratively, searches the spatial index in parallel,
 // and streams compressed/encrypted deltas to disk in block frames without blowing up RAM.
@@ -103,7 +109,9 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	if err != nil {
 		return nil, fmt.Errorf("pack: entropy analysis: %w", err)
 	}
-	isPassthrough := opts.Mode != "edge" && (entropy.DetectHeuristicBypass(eScore, startBytes) || entropy.IsLowEntropy(eScore))
+	// With a brain, even high-entropy data may already be known to the receiver.
+	hasBrain := codebookPath != "" || len(opts.CodebookPaths) > 0
+	isPassthrough := !hasBrain && opts.Mode != "edge" && (entropy.DetectHeuristicBypass(eScore, startBytes) || entropy.IsLowEntropy(eScore))
 
 	// Adaptive Chunk Size Configuration
 	if opts.ChunkSize <= 0 {
@@ -143,6 +151,11 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		}()
 	}
 
+	// Chunks must have the size of the codewords to match them exactly.
+	if len(cbs) > 0 && !opts.UseCDC && !opts.UseACAC {
+		opts.ChunkSize = int(cbs[0].CodewordSize())
+	}
+
 	info, err := inFile.Stat()
 	if err != nil {
 		return nil, err
@@ -171,6 +184,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		ChunkCount:    numEstimatedChunks,
 		IsPassthrough: isPassthrough,
 		ChunkSize:     uint32(opts.ChunkSize),
+		IsLossy:       opts.Mode == "edge",
 	}
 
 	if len(cbs) > 0 {
@@ -278,6 +292,8 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		fc = semantic.NewContextualChunker(fileType, opts.ChunkSize*8) // allow longer max size for context chunker
 	} else if opts.UseCDC {
 		fc = chunker.NewFastCDCChunker(opts.ChunkSize)
+	} else if len(cbs) > 0 && opts.ChunkSize >= search.AlignedMinCodewordSize {
+		fc = search.NewAlignedChunker(cbs[0])
 	} else {
 		fc = chunker.NewFixedChunker(opts.ChunkSize)
 	}
@@ -378,7 +394,28 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 					defer wg.Done()
 					for i := range jobs {
 						chunk := chunks[i]
-						
+
+						// The receiver already has this chunk: only its ID travels.
+						exactFound := false
+						for cbIdx, searcher := range searchers {
+							if id, ok := searcher.FindExact(chunk.Data); ok {
+								results[i] = processedChunk{
+									res: []byte{},
+									sim: 1.0,
+									entry: format.ChunkEntry{
+										CodebookID:    id,
+										CodebookIndex: uint8(cbIdx),
+										OriginalSize:  uint32(chunk.Size),
+									},
+								}
+								exactFound = true
+								break
+							}
+						}
+						if exactFound {
+							continue
+						}
+
 						// EXPERT ROUTING: Entropy-based Passthrough
 						chunkEntropy := entropy.Shannon(chunk.Data)
 						if chunkEntropy <= 3.00 {
@@ -398,7 +435,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 							}
 						}
 
-						if opts.Mode != "edge" && (chunkEntropy > 3.00 || entropy.DetectHeuristicBypass(chunkEntropy, chunk.Data)) {
+						if opts.Mode != "edge" && (chunkEntropy > 7.8 || entropy.DetectHeuristicBypass(chunkEntropy, chunk.Data)) {
 							// Passthrough High-Entropy Chunk (Treat as Literal immediately)
 							results[i] = processedChunk{
 								res: chunk.Data,
@@ -445,7 +482,9 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 									dynamicPatchThreshold = 0.95
 								}
 								
-								if sim < 0.20 && opts.Mode != "edge" {
+								if bytes.Equal(chunk.Data, usablePattern) {
+									bestRes = []byte{}
+								} else if sim < minNearMatchSimilarity && opts.Mode != "edge" {
 									bestRes = chunk.Data
 									bestCodeID = format.LiteralCodebookID
 									bestCbIdx = format.LiteralCodebookIndex
@@ -468,6 +507,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 								// BIFURCAÇÃO DE SHANNON: No modo Edge, descartamos a diferença (Lossy)
 								if opts.Mode == "edge" && bestCodeID != format.LiteralCodebookID {
 									bestRes = []byte{}
+									bestCodeID = match.CodebookID
 								}
 							}
 							
@@ -539,6 +579,8 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 					h64.Write(res.res)
 					literalFreq[h64.Sum64()]++
 
+				} else if res.entry.DeltaSize == 0 {
+					hitCount++
 				} else if res.entry.DeltaSize > 0 {
 					zeroes := 0
 					for _, b := range res.res {

@@ -5,6 +5,10 @@ import (
 	"math"
 	"sync"
 
+	"bytes"
+
+	"github.com/cespare/xxhash/v2"
+
 	"github.com/MrJc01/crompressor/internal/codebook"
 )
 
@@ -18,6 +22,8 @@ type LSHSearcher struct {
 	buckets map[uint16][]uint64
 	// Fallback to linear if a bucket is empty (for the MVP to guarantee a result)
 	linear *LinearSearcher
+	// exact maps the hash of a whole codeword to its ID, for O(1) deduplication.
+	exact map[uint64]uint64
 	// V16: LRU Cache for O(1) repeated chunk matching
 	cacheMu    sync.RWMutex
 	cache      map[uint64]MatchResult
@@ -31,6 +37,7 @@ func NewLSHSearcher(cb *codebook.Reader) *LSHSearcher {
 	ls := &LSHSearcher{
 		cb:         cb,
 		buckets:    make(map[uint16][]uint64),
+		exact:      make(map[uint64]uint64),
 		linear:     NewLinearSearcher(cb),
 		cache:      make(map[uint64]MatchResult, lshCacheSize),
 		cacheOrder: make([]uint64, lshCacheSize),
@@ -47,7 +54,20 @@ func (ls *LSHSearcher) buildIndex() {
 		pattern := ls.cb.LookupUnsafe(id)
 		hash := computeLSH(pattern)
 		ls.buckets[hash] = append(ls.buckets[hash], id)
+		ls.exact[xxhash.Sum64(pattern)] = id
 	}
+}
+
+// FindExact returns the ID of the codeword that is byte-identical to chunk.
+func (ls *LSHSearcher) FindExact(chunk []byte) (uint64, bool) {
+	if ls.cb == nil || len(chunk) != int(ls.cb.CodewordSize()) {
+		return 0, false
+	}
+	id, ok := ls.exact[xxhash.Sum64(chunk)]
+	if !ok || !bytes.Equal(ls.cb.LookupUnsafe(id), chunk) {
+		return 0, false
+	}
+	return id, true
 }
 
 // Restrict prunes the search space to only allowed CodebookIDs, ignoring the rest.
@@ -55,6 +75,12 @@ func (ls *LSHSearcher) Restrict(allowed []uint64) {
 	allowedMap := make(map[uint64]bool, len(allowed))
 	for _, id := range allowed {
 		allowedMap[id] = true
+	}
+
+	for h, id := range ls.exact {
+		if !allowedMap[id] {
+			delete(ls.exact, h)
+		}
 	}
 
 	for bucket, ids := range ls.buckets {
@@ -154,6 +180,14 @@ func (ls *LSHSearcher) FindBestMatch(chunk []byte) (MatchResult, error) {
 	// MVP Fallback: if no patterns exist in this exact bucket, do a linear scan.
 	// In HNSW or Multi-Probe LSH, we would check neighboring buckets instead.
 	if !ok || len(candidates) == 0 {
+		// Scanning a brain of large codewords costs far more than it can save.
+		if int(ls.cb.CodewordSize()) >= AlignedMinCodewordSize {
+			return MatchResult{
+				CodebookID: 0,
+				Pattern:    ls.cb.LookupUnsafe(0),
+				Distance:   len(chunk) * 8,
+			}, nil
+		}
 		result, err := ls.linear.FindBestMatch(chunk)
 		if err == nil {
 			ls.cacheStore(h, result)
