@@ -77,6 +77,9 @@ func NewRandomReader(f io.ReaderAt, fileSize int64, header *format.Header, block
 		hSize = format.HeaderSizeV8 + int(header.MicroDictSize)
 	}
 
+	if header.TableBytes > 0 {
+		tableSize = int(header.TableBytes)
+	}
 	baseOffset := int64(hSize + len(blockTable)*4 + tableSize)
 
 	rr.blockOffsets = make([]int64, len(blockTable))

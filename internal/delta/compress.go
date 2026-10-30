@@ -107,3 +107,24 @@ func DecompressPoolDict(compressed, dict []byte) ([]byte, error) {
 	}
 	return out, nil
 }
+
+// BrainWriter compresses a stream with the shared brain as dictionary.
+type BrainWriter struct{ *zstd.Encoder }
+
+// NewBrainWriter returns a compressing writer over w.
+func NewBrainWriter(w io.Writer, dict []byte) (*BrainWriter, error) {
+	enc, err := zstd.NewWriter(w, brainEncoderOptions(dict)...)
+	if err != nil {
+		return nil, fmt.Errorf("delta: init stream encoder: %w", err)
+	}
+	return &BrainWriter{enc}, nil
+}
+
+// NewBrainReader returns a decompressing reader over r.
+func NewBrainReader(r io.Reader, dict []byte) (*zstd.Decoder, error) {
+	dec, err := zstd.NewReader(r, brainDecoderOptions(dict)...)
+	if err != nil {
+		return nil, fmt.Errorf("delta: init stream decoder: %w", err)
+	}
+	return dec, nil
+}

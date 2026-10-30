@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/klauspost/compress/zstd"
+
 	"github.com/MrJc01/crompressor/internal/crypto"
 )
 
@@ -106,6 +108,11 @@ func (cr *Reader) ReadMetadata(encryptionKey string) (*Header, []uint32, []Chunk
 		return header, blockTable, nil, nil
 	}
 
+	if header.CompressedTable {
+		entries, err := cr.readCompressedTable(header, derivedKey)
+		return header, blockTable, entries, err
+	}
+
 	// 3. Read Chunk Table
 	// If encrypted, the length of the ciphertext is greater due to the 12-byte nonce and 16-byte tag (28 bytes overhead).
 	tableSize := int(header.ChunkCount) * int(GetEntrySize(header.Version))
@@ -117,6 +124,7 @@ func (cr *Reader) ReadMetadata(encryptionKey string) (*Header, []uint32, []Chunk
 		return nil, nil, nil, fmt.Errorf("format: chunk map size overflow: %d entries", header.ChunkCount)
 	}
 
+	header.TableBytes = int64(tableSize)
 	tableBuf := make([]byte, tableSize)
 	if _, err := io.ReadFull(cr.r, tableBuf); err != nil {
 		return nil, nil, nil, fmt.Errorf("format: read chunk table: %w", err)
@@ -144,4 +152,43 @@ func (cr *Reader) ReadStream(encryptionKey string) (*Header, []uint32, []ChunkEn
 		return nil, nil, nil, nil, err
 	}
 	return header, blockTable, entries, cr.r, nil
+}
+
+// readCompressedTable reads a table written by EncodeCompressedTable.
+func (cr *Reader) readCompressedTable(header *Header, key []byte) ([]ChunkEntry, error) {
+	var sizeBuf [4]byte
+	if _, err := io.ReadFull(cr.r, sizeBuf[:]); err != nil {
+		return nil, fmt.Errorf("format: read table size: %w", err)
+	}
+	size := binary.LittleEndian.Uint32(sizeBuf[:])
+	maxSize := uint64(header.ChunkCount)*uint64(GetEntrySize(header.Version)) + 1024
+	if uint64(size) > maxSize+maxSize/8 {
+		return nil, fmt.Errorf("format: compressed table size %d is implausible", size)
+	}
+	blob := make([]byte, size)
+	if _, err := io.ReadFull(cr.r, blob); err != nil {
+		return nil, fmt.Errorf("format: read compressed table: %w", err)
+	}
+	header.TableBytes = int64(size) + 4
+	if key != nil {
+		dec, err := crypto.Decrypt(key, blob)
+		if err != nil {
+			return nil, fmt.Errorf("format: decrypt chunk table: %w", err)
+		}
+		blob = dec
+	}
+	dec, err := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1), zstd.WithDecoderMaxMemory(maxSize))
+	if err != nil {
+		return nil, fmt.Errorf("format: init table decoder: %w", err)
+	}
+	defer dec.Close()
+	table, err := dec.DecodeAll(blob, nil)
+	if err != nil {
+		return nil, fmt.Errorf("format: decompress chunk table: %w", err)
+	}
+	entries, err := ParseChunkTable(table, header.ChunkCount, header.Version)
+	if err != nil {
+		return nil, fmt.Errorf("format: parse chunk table: %w", err)
+	}
+	return entries, nil
 }

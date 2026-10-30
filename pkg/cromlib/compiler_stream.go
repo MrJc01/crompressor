@@ -259,6 +259,7 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 		UsesBrainDict: cb != nil,
 	}
 
+	header.CompressedTable = true
 	headerBytes := header.Serialize()
 	outFile.Write(headerBytes)
 
@@ -271,7 +272,10 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 	outFile.Write(blockTableRaw)
 
 	// Write Chunk Table
-	chunkTableData := format.SerializeChunkTable(allEntries, format.Version5)
+	chunkTableData, err := format.EncodeCompressedTable(allEntries, format.Version5, nil)
+	if err != nil {
+		return nil, fmt.Errorf("stream: encode chunk table: %w", err)
+	}
 	outFile.Write(chunkTableData)
 
 	// Copy the compressed delta pool from temp

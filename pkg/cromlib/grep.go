@@ -102,6 +102,9 @@ func Grep(target string, inputPath string, codebookPath string) error {
 	if header.Version == format.Version6 || header.Version == format.Version7 { hSize = format.HeaderSizeV6 }
 	if header.Version >= format.Version8 { hSize = format.HeaderSizeV8 + int(header.MicroDictSize) }
 
+	if header.TableBytes > 0 {
+		tableSize = int(header.TableBytes)
+	}
 	baseOffset := int64(hSize + len(blockTable)*4 + tableSize)
 	blockOffsets := make([]int64, len(blockTable))
 	currentPhysical := baseOffset

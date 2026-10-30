@@ -16,6 +16,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/MrJc01/crompressor/internal/codebook"
+	"github.com/MrJc01/crompressor/internal/delta"
 	cromsync "github.com/MrJc01/crompressor/pkg/sync"
 )
 
@@ -122,7 +123,11 @@ func (p *SyncProtocol) handleSyncReq(s network.Stream, filename string) {
 		return
 	}
 
-	bin := manifest.ToBinary()
+	bin, err := delta.CompressPool(manifest.ToBinary())
+	if err != nil {
+		sendError(s, "Erro ao comprimir manifest: "+err.Error())
+		return
+	}
 	sendMsg(s, MsgManifest, bin)
 }
 
@@ -254,7 +259,11 @@ func (p *SyncProtocol) RequestSync(ctx context.Context, pid peer.ID, filename st
 		return fmt.Errorf("esperava MANIFEST (0x02), recebeu 0x%02x", msgType)
 	}
 
-	remoteManifest, err := cromsync.FromBinary(payload)
+	manifestBin, err := delta.DecompressPool(payload)
+	if err != nil {
+		return fmt.Errorf("sync: decompress remote manifest: %w", err)
+	}
+	remoteManifest, err := cromsync.FromBinary(manifestBin)
 	if err != nil {
 		return fmt.Errorf("sync: parse remote manifest: %w", err)
 	}

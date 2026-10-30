@@ -189,6 +189,7 @@ func PackBytes(input []byte, codebookData []byte, opts PackOptions) ([]byte, *Me
 	cbHash := cb.BuildHash()
 	copy(header.CodebookHash[:], cbHash[:8])
 
+	header.CompressedTable = true
 	var buf bytes.Buffer
 
 	// Header
@@ -202,7 +203,10 @@ func PackBytes(input []byte, codebookData []byte, opts PackOptions) ([]byte, *Me
 	}
 
 	// Chunk table
-	tableData := format.SerializeChunkTable(entries, header.Version)
+	tableData, err := format.EncodeCompressedTable(entries, header.Version, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("packbytes: encode chunk table: %w", err)
+	}
 	buf.Write(tableData)
 
 	// Compressed delta pool

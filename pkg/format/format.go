@@ -5,6 +5,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+
+	"github.com/klauspost/compress/zstd"
+
+	"github.com/MrJc01/crompressor/internal/crypto"
 )
 
 const (
@@ -102,8 +106,10 @@ type Header struct {
 	IsEncrypted           bool
 	IsPassthrough         bool
 	IsConvergentEncrypted bool
-	IsLossy               bool // Packed in edge mode: the output will not match OriginalHash
-	UsesBrainDict         bool // Blocks were compressed with the brain as zstd dictionary
+	IsLossy               bool  // Packed in edge mode: the output will not match OriginalHash
+	UsesBrainDict         bool  // Blocks were compressed with the brain as zstd dictionary
+	CompressedTable       bool  // Chunk table is [uint32 size][zstd frame, encrypted if the file is]
+	TableBytes            int64 // Bytes the chunk table takes on disk (set when reading, not stored)
 	Salt                  [16]byte
 	OriginalHash          [HashSize]byte
 	OriginalSize          uint64
@@ -237,6 +243,7 @@ func ParseHeader(data []byte) (*Header, error) {
 			h.IsPassthrough = data[7]&1 != 0
 			h.IsLossy = data[7]&2 != 0
 			h.UsesBrainDict = data[7]&4 != 0
+			h.CompressedTable = data[7]&8 != 0
 		}
 		copy(h.Salt[:], data[8:24])
 		copy(h.OriginalHash[:], data[24:56])
@@ -320,6 +327,9 @@ func (h *Header) Serialize() []byte {
 	if h.UsesBrainDict {
 		buf[7] |= 4
 	}
+	if h.CompressedTable {
+		buf[7] |= 8
+	}
 	copy(buf[8:24], h.Salt[:])
 	copy(buf[24:56], h.OriginalHash[:])
 	binary.LittleEndian.PutUint64(buf[56:64], h.OriginalSize)
@@ -364,6 +374,25 @@ func GetEntrySize(version uint16) uint32 {
 		return EntrySizeV7
 	}
 	return EntrySizeV6
+}
+
+// EncodeCompressedTable returns the on-disk form of a compressed chunk table.
+func EncodeCompressedTable(entries []ChunkEntry, version uint16, key []byte) ([]byte, error) {
+	enc, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedBestCompression), zstd.WithEncoderConcurrency(1))
+	if err != nil {
+		return nil, fmt.Errorf("format: init table encoder: %w", err)
+	}
+	defer enc.Close()
+	blob := enc.EncodeAll(SerializeChunkTable(entries, version), nil)
+	if key != nil {
+		if blob, err = crypto.Encrypt(key, blob); err != nil {
+			return nil, fmt.Errorf("format: encrypt chunk table: %w", err)
+		}
+	}
+	out := make([]byte, 4+len(blob))
+	binary.LittleEndian.PutUint32(out, uint32(len(blob)))
+	copy(out[4:], blob)
+	return out, nil
 }
 
 // ParseChunkTable decodes the contiguous slice of ChunkEntries.

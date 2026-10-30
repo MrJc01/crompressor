@@ -701,13 +701,10 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		copy(header.MerkleRoot[:], root[:])
 	}
 
-	tableData := format.SerializeChunkTable(finalEntries, header.Version)
-	if header.IsEncrypted {
-		encTable, err := crypto.Encrypt(derivedKey, tableData)
-		if err != nil {
-			return nil, fmt.Errorf("pack: encrypt chunk table: %w", err)
-		}
-		tableData = encTable
+	header.CompressedTable = true
+	tableData, err := format.EncodeCompressedTable(finalEntries, header.Version, derivedKey)
+	if err != nil {
+		return nil, fmt.Errorf("pack: encode chunk table: %w", err)
 	}
 
 	// Build actual block table bytes
@@ -780,6 +777,8 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		header.ChunkCount = 0 // Mark as passthrough
 		header.MicroDictSize = 0
 		header.MicroDictionaryData = nil
+		header.CompressedTable = false
+		header.UsesBrainDict = false
 
 		// Write placeholder header first
 		if _, err := outFile.Write(header.Serialize()); err != nil {

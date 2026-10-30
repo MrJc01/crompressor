@@ -77,6 +77,19 @@ func StreamChunks(localPath, codebookPath, encryptionKey string, indices []uint3
 		}
 	}
 
+	var dict []byte
+	wireCb, err := loadCb(codebookPath)
+	if err != nil {
+		return fmt.Errorf("bitswap: open codebook: %w", err)
+	}
+	defer wireCb.Close()
+	dict = wireCb.Dictionary()
+	zw, err := delta.NewBrainWriter(s, dict)
+	if err != nil {
+		return err
+	}
+	defer zw.Close()
+
 	// Stream chunks
 	for _, idx := range indices {
 		if idx >= uint32(len(entries)) {
@@ -96,17 +109,28 @@ func StreamChunks(localPath, codebookPath, encryptionKey string, indices []uint3
 		binary.LittleEndian.PutUint32(header[0:4], idx)
 		binary.LittleEndian.PutUint32(header[4:8], uint32(len(residual)))
 
-		if _, err := s.Write(header); err != nil {
+		if _, err := zw.Write(header); err != nil {
 			return err
 		}
 		if len(residual) > 0 {
-			if _, err := s.Write(residual); err != nil {
+			if _, err := zw.Write(residual); err != nil {
 				return err
 			}
 		}
 	}
 
-	return nil
+	return zw.Close()
+}
+
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
 }
 
 // ReceiveChunks reads streamed deltas and rebuilds the .crom file, taking the chunks
@@ -123,9 +147,15 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 	brainDict := cb.Dictionary()
 
 	// 1. Read the missing chunks from network
+	counted := &countingReader{r: s}
+	zr, err := delta.NewBrainReader(counted, brainDict)
+	if err != nil {
+		return 0, err
+	}
+	defer zr.Close()
 	for i := 0; i < len(missingIndices); i++ {
 		header := make([]byte, 8)
-		if _, err := io.ReadFull(s, header); err != nil {
+		if _, err := io.ReadFull(zr, header); err != nil {
 			if err == io.EOF {
 				break
 			}
@@ -137,14 +167,14 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 
 		residual := make([]byte, size)
 		if size > 0 {
-			if _, err := io.ReadFull(s, residual); err != nil {
+			if _, err := io.ReadFull(zr, residual); err != nil {
 				return received, fmt.Errorf("bitswap: read residual data: %w", err)
 			}
 		}
 
 		residuals[idx] = residual
-		received += int64(len(header)) + int64(size)
 	}
+	received = counted.n
 
 	fmt.Printf("[Sync] Bitswap completo. %d chunks recebidos. Repackaging...\n", len(residuals))
 
@@ -231,13 +261,13 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 	}
 	blockStarts := format.BlockStarts(finalEntries)
 
-	metadataSize := int64(len(fileHeader.Serialize())) + int64(len(blockStarts))*4 + int64(manifest.ChunkCount)*int64(format.GetEntrySize(format.Version7))
-	if fileHeader.IsEncrypted {
-		metadataSize += 28 // AES-GCM overhead of the chunk table
-	}
-	if _, err := outFile.Seek(metadataSize, 0); err != nil {
+	// The compressed table size is only known after the blocks, so they go to a temp file.
+	tmpPool, err := os.CreateTemp("", "crom_sync_pool_*")
+	if err != nil {
 		return received, err
 	}
+	defer os.Remove(tmpPool.Name())
+	defer tmpPool.Close()
 
 	blockTable := make([]uint32, 0, len(blockStarts))
 	currentOffset := uint64(0)
@@ -272,7 +302,7 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 		}
 
 		blockTable = append(blockTable, uint32(len(compBlock)))
-		if _, err := outFile.Write(compBlock); err != nil {
+		if _, err := tmpPool.Write(compBlock); err != nil {
 			return received, err
 		}
 	}
@@ -281,19 +311,21 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 	for i, size := range blockTable {
 		binary.LittleEndian.PutUint32(blockTableRaw[i*4:], size)
 	}
-	if _, err := outFile.Seek(0, 0); err != nil {
+	fileHeader.CompressedTable = true
+	tableData, err := format.EncodeCompressedTable(finalEntries, format.Version7, newKey)
+	if err != nil {
 		return received, err
-	}
-	tableData := format.SerializeChunkTable(finalEntries, format.Version7)
-	if fileHeader.IsEncrypted {
-		if tableData, err = crypto.Encrypt(newKey, tableData); err != nil {
-			return received, fmt.Errorf("bitswap: encrypt chunk table: %w", err)
-		}
 	}
 	for _, part := range [][]byte{fileHeader.Serialize(), blockTableRaw, tableData} {
 		if _, err := outFile.Write(part); err != nil {
 			return received, err
 		}
+	}
+	if _, err := tmpPool.Seek(0, 0); err != nil {
+		return received, err
+	}
+	if _, err := io.Copy(outFile, tmpPool); err != nil {
+		return received, err
 	}
 
 	return received, nil
