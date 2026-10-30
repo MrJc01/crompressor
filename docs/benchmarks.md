@@ -8,36 +8,44 @@ dados novos: os resultados são muito diferentes.
 
 Blocos de 4 KB, modo archive. Todos os casos restauraram bit a bit. Valores em bytes.
 
-| Caso | Original | Cérebro | `.crom` | zstd -19 | zstd --patch-from |
-|---|---|---|---|---|---|
-| Visto: projeto idêntico | 27.545.600 | 9.089.536 | 17.017 | 244.461 | não medido |
-| Visto: projeto + 1 byte no início | 27.545.601 | 9.089.536 | 15.587 | 244.454 | 2.340 |
-| Parecido: versão real mais nova do projeto | 27.555.840 | 9.089.536 | 25.758 | 245.935 | 9.260 |
-| Visto: binário aleatório idêntico | 20.000.000 | 19.997.184 | 13.235 | 20.000.473 | não medido |
-| Parecido: binário aleatório + 4 bytes no meio | 20.000.004 | 19.997.184 | 12.556 | 20.000.477 | 1.716 |
-| Novo: logs de outro dia, mesmo formato | 7.137.622 | 7.086.592 | 1.190.832 | 956.223 | 937.932 |
-| Novo: código Go de outros arquivos | 15.237.120 | 13.255.168 | 2.248.321 | 2.187.974 | 2.002.373 |
+| Caso | Original | Cérebro | `.crom` | `--max-compression` | zstd -19 | zstd --patch-from |
+|---|---|---|---|---|---|---|
+| Visto: projeto idêntico | 27.545.600 | 9.089.536 | 6.558 | 6.132 | 244.461 | não medido |
+| Visto: projeto + 1 byte no início | 27.545.601 | 9.089.536 | 6.572 | 6.146 | 244.454 | 2.340 |
+| Parecido: versão real mais nova do projeto | 27.555.840 | 9.089.536 | 15.187 | 13.238 | 245.935 | 9.260 |
+| Visto: binário aleatório idêntico | 20.000.000 | 19.997.184 | 13.204 | 13.205 | 20.000.473 | não medido |
+| Parecido: binário aleatório + 4 bytes no meio | 20.000.004 | 19.997.184 | 13.289 | 13.296 | 20.000.477 | 1.716 |
+| Novo: logs de outro dia, mesmo formato | 7.137.622 | 7.086.592 | 1.189.575 | 933.060 | 956.223 | 937.932 |
+| Novo: código Go de outros arquivos | 14.725.120 | 14.238.208 | 2.282.377 | 2.080.772 | 2.219.530 | 2.026.861 |
 
 Como ler esses números:
 
-- **Dados que o cérebro já contém:** só as referências viajam, e elas são comprimidas.
-  A redução passa de 99,9%, mesmo em dados incompressíveis.
-- **Dados novos do mesmo tipo:** o cérebro entra como dicionário do zstd, mas ainda
-  fica atrás do `zstd -19`, com perda de 3% a 25% nos casos medidos. Blocos inteiros
-  iguais são raros, e o compressor Go usado aqui é mais fraco que o nível 19.
-- **Cérebro:** neste modo ele tem quase o tamanho dos dados que aprendeu. O ganho
-  vem de ele já estar instalado e ser reaproveitado em muitas transferências.
-- **`zstd --patch-from`:** continua menor quando existe uma única versão base. O
+- **Dados que o cérebro já contém:** só as referências viajam, com redução acima de 99,9%,
+  mesmo em dados incompressíveis.
+- **Dados novos do mesmo tipo:** o padrão fica atrás do `zstd -19` porque o compressor em
+  Go é mais fraco. Com `--max-compression` (nível 19, encoder em C, binário com CGO), o
+  Crompressor passa o `zstd -19` nos dois casos, a um custo de cerca de 25 s nos logs.
+- **Cérebro:** neste modo ele tem quase o tamanho dos dados que aprendeu. O ganho vem de
+  ele já estar instalado e ser reaproveitado em muitas transferências.
+- **`zstd --patch-from`:** ainda é menor com uma única versão base na maioria dos casos. O
   Crompressor serve para um cérebro comum a muitos arquivos e usuários.
 
 ## Sincronização entre nós
 
-`daemon` e `pull` em contêineres Docker separados, com TCP entre IPs diferentes: arquivo
-de 30 MB aleatórios, 4 bytes inseridos no meio, receptor com a versão antiga. Passaram
-**17.083 bytes** pela rede e o SHA-256 da restauração bateu. O resultado foi o mesmo com
-`--peer` e com descoberta por DHT privada (`--bootstrap --private-dht`), sem mDNS.
+Arquivo de 30 MB aleatórios com 4 bytes inseridos no meio; o SHA-256 da restauração bateu
+em todos os casos que completaram. Nos contêineres, cada nó tinha 80 ms de atraso e 1% de perda.
 
-Não medido: máquinas em redes diferentes, NAT, perda de pacotes e DHT pública.
+| Cenário | Resultado |
+|---|---|
+| Receptor atrás de NAT, emissor público, com versão antiga | 18.952 bytes |
+| Igual, sem versão local | 28.059 bytes |
+| Dois lados atrás de NAT, porta aberta no emissor | 18.952 bytes |
+| Dois lados atrás de NAT, sem porta aberta | **Falha: conexão impossível** |
+| DHT privada entre contêineres, sem mDNS (sem atraso nem perda) | 17.083 bytes |
+| DHT pública pela internet, dois processos na mesma máquina | 28.059 bytes, achou o peer em 95 s |
+
+Não medido: máquinas fisicamente em redes diferentes. Não há relay: quem está atrás de NAT
+só recebe conexões com uma porta aberta.
 
 ## Como reproduzir
 

@@ -16,7 +16,12 @@ row() { # rótulo, cérebro, base do patch, arquivo
   nice -n 19 "$CROM" pack -i "$4" -o o.crom -c "$2" --concurrency 2 >/dev/null 2>&1
   nice -n 19 "$CROM" unpack -i o.crom -o o.out -c "$2" >/dev/null 2>&1
   cmp -s "$4" o.out && r=ok || r=FALHOU
-  echo "| $1 | $(sz "$4") | $(sz "$2") | $(sz o.crom) | $r | $(z "$4") | $(patch "$3" "$4") |"
+  : > m.crom
+  nice -n 19 "$CROM" pack -i "$4" -o m.crom -c "$2" --concurrency 2 --max-compression >/dev/null 2>&1
+  : > m.out
+  nice -n 19 "$CROM" unpack -i m.crom -o m.out -c "$2" >/dev/null 2>&1
+  cmp -s "$4" m.out || r="$r, max FALHOU"
+  echo "| $1 | $(sz "$4") | $(sz "$2") | $(sz o.crom) | $(sz m.crom) | $r | $(z "$4") | $(patch "$3" "$4") |"
 }
 
 OLD=$(git -C "$REPO" rev-list origin/dev -- pesquisa | sed -n 4p)
@@ -37,8 +42,8 @@ sed -n '1~2p' list.txt | tar cf go_treino.tar -T - 2>/dev/null
 sed -n '2~2p' list.txt | tar cf go_novo.tar -T - 2>/dev/null
 
 train proj v1.tar; train rnd r1.bin; train log log1.txt; train go go_treino.tar
-echo "| Caso | Original | Cérebro | \`.crom\` | Restaurou | zstd -19 | zstd --patch-from |"
-echo "|---|---|---|---|---|---|---|"
+echo "| Caso | Original | Cérebro | \`.crom\` | \`--max-compression\` | Restaurou | zstd -19 | zstd --patch-from |"
+echo "|---|---|---|---|---|---|---|---|"
 row "Visto: projeto idêntico" proj.cromdb v1.tar v1.tar
 row "Visto: projeto + 1 byte no início" proj.cromdb v1.tar shift.tar
 row "Parecido: versão real mais nova do projeto" proj.cromdb v1.tar v2.tar
