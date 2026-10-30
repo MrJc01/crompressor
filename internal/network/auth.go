@@ -48,7 +48,8 @@ func (n *CromNode) authProof(sender peer.ID, nonce []byte) []byte {
 }
 
 // handshake runs the same mutual challenge on both ends of the stream.
-func (n *CromNode) handshake(s network.Stream) error {
+// The initiator waits for a final ack, so it only proceeds once the other side accepted it.
+func (n *CromNode) handshake(s network.Stream, initiator bool) error {
 	s.SetDeadline(time.Now().Add(AuthTimeout))
 
 	ourNonce := make([]byte, authNonceSize)
@@ -74,6 +75,16 @@ func (n *CromNode) handshake(s network.Stream) error {
 		return errBrainMismatch
 	}
 	n.authenticated.Store(remote, true)
+	ack := make([]byte, 1)
+	if initiator {
+		if _, err := io.ReadFull(s, ack); err != nil {
+			return fmt.Errorf("read ack: %w", err)
+		}
+		return nil
+	}
+	if _, err := s.Write(ack); err != nil {
+		return fmt.Errorf("send ack: %w", err)
+	}
 	return nil
 }
 
@@ -81,7 +92,7 @@ func (n *CromNode) handshake(s network.Stream) error {
 func (n *CromNode) authHandler(s network.Stream) {
 	defer s.Close()
 	remote := s.Conn().RemotePeer()
-	if err := n.handshake(s); err != nil {
+	if err := n.handshake(s, false); err != nil {
 		fmt.Printf("[Auth] ❌ Peer %s rejeitado: %v\n", remote, err)
 		if errors.Is(err, errBrainMismatch) {
 			s.Conn().Close()
@@ -100,7 +111,7 @@ func (n *CromNode) AuthenticatePeer(ctx context.Context, pid peer.ID) error {
 	}
 	defer s.Close()
 
-	if err := n.handshake(s); err != nil {
+	if err := n.handshake(s, true); err != nil {
 		if errors.Is(err, errBrainMismatch) {
 			n.Host.Network().ClosePeer(pid)
 		}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -33,92 +34,61 @@ func StreamChunks(localPath, codebookPath, encryptionKey string, indices []uint3
 		return err
 	}
 
-	var derivedKey []byte
-	if header.IsEncrypted {
-		derivedKey = crypto.DeriveKey([]byte(encryptionKey), header.Salt[:])
-	}
-
-	var uncompressedPool []byte
-	if header.Version >= format.Version2 {
-		for i, blockSize := range blockTable {
-			blockData := make([]byte, blockSize)
-			if _, err := io.ReadFull(rStream, blockData); err != nil {
-				return fmt.Errorf("bitswap: read block %d: %w", i, err)
-			}
-
-			if header.IsEncrypted {
-				dec, err := crypto.Decrypt(derivedKey, blockData)
-				if err != nil {
-					return fmt.Errorf("bitswap: decrypt block %d: %w", i, err)
-				}
-				blockData = dec
-			}
-
-			var dict []byte
-			if header.UsesBrainDict {
-				cb, err := loadCb(codebookPath)
-				if err != nil {
-					return fmt.Errorf("bitswap: open codebook: %w", err)
-				}
-				defer cb.Close()
-				dict = cb.Dictionary()
-			}
-			decompressed, err := delta.DecompressPoolDict(blockData, dict)
-			if err != nil {
-				return fmt.Errorf("bitswap: decompress block %d: %w", i, err)
-			}
-			uncompressedPool = append(uncompressedPool, decompressed...)
-		}
-	} else {
-		compDeltaPool, _ := io.ReadAll(rStream)
-		uncompressedPool, err = delta.DecompressPool(compDeltaPool)
-		if err != nil {
-			return err
-		}
-	}
-
-	var dict []byte
 	wireCb, err := loadCb(codebookPath)
 	if err != nil {
 		return fmt.Errorf("bitswap: open codebook: %w", err)
 	}
 	defer wireCb.Close()
-	dict = wireCb.Dictionary()
+	dict := wireCb.Dictionary()
 	zw, err := delta.NewBrainWriter(s, dict)
 	if err != nil {
 		return err
 	}
 	defer zw.Close()
 
-	// Stream chunks
-	for _, idx := range indices {
-		if idx >= uint32(len(entries)) {
-			continue // Invalid index
-		}
-
-		entry := entries[idx]
-		endOffset := entry.DeltaOffset + uint64(entry.DeltaSize)
-		if endOffset > uint64(len(uncompressedPool)) {
-			return fmt.Errorf("bitswap: bounds error on chunk %d", idx)
-		}
-
-		residual := uncompressedPool[entry.DeltaOffset:endOffset]
-
-		// Format: [Chunk Index (4)] [Residual Size (4)] [Residual Data]
-		header := make([]byte, 8)
-		binary.LittleEndian.PutUint32(header[0:4], idx)
-		binary.LittleEndian.PutUint32(header[4:8], uint32(len(residual)))
-
-		if _, err := zw.Write(header); err != nil {
-			return err
-		}
-		if len(residual) > 0 {
-			if _, err := zw.Write(residual); err != nil {
-				return err
-			}
-		}
+	var poolDict []byte
+	if header.UsesBrainDict {
+		poolDict = dict
 	}
+	ordered := append([]uint32(nil), indices...)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i] < ordered[j] })
+	next := 0
 
+	err = cromsync.ForEachBlock(rStream, header, blockTable, entries, poolDict, encryptionKey,
+		func(first, end int) bool {
+			return next < len(ordered) && int(ordered[next]) < end
+		},
+		func(first, end int, pool []byte) error {
+			base := entries[first].DeltaOffset
+			for ; next < len(ordered) && int(ordered[next]) < end; next++ {
+				idx := ordered[next]
+				if int(idx) < first {
+					continue // Invalid or repeated index
+				}
+				entry := entries[idx]
+				from := entry.DeltaOffset - base
+				to := from + uint64(entry.DeltaSize)
+				if to > uint64(len(pool)) {
+					return fmt.Errorf("bitswap: bounds error on chunk %d", idx)
+				}
+				residual := pool[from:to]
+
+				// Format: [Chunk Index (4)] [Residual Size (4)] [Residual Data]
+				chunkHeader := make([]byte, 8)
+				binary.LittleEndian.PutUint32(chunkHeader[0:4], idx)
+				binary.LittleEndian.PutUint32(chunkHeader[4:8], uint32(len(residual)))
+				if _, err := zw.Write(chunkHeader); err != nil {
+					return err
+				}
+				if _, err := zw.Write(residual); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	if err != nil {
+		return err
+	}
 	return zw.Close()
 }
 
@@ -139,8 +109,27 @@ func (c *countingReader) Read(p []byte) (int, error) {
 // ReceiveChunks reads streamed deltas and rebuilds the .crom file, taking the chunks
 // it already has from the local version. It returns the bytes read from the network.
 func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkManifest, missingIndices []uint32, s network.Stream, codebookPath string, encryptionKey string) (int64, error) {
-	residuals := make(map[uint32][]byte)
 	var received int64
+
+	// Residuals wait on disk, so memory does not grow with the file.
+	spill, err := os.CreateTemp("", "crom_sync_residuals_*")
+	if err != nil {
+		return 0, err
+	}
+	defer os.Remove(spill.Name())
+	defer spill.Close()
+	type spilled struct {
+		off  int64
+		size uint32
+	}
+	var spillEnd int64
+	keep := func(data []byte) (spilled, error) {
+		ref := spilled{spillEnd, uint32(len(data))}
+		_, err := spill.Write(data)
+		spillEnd += int64(len(data))
+		return ref, err
+	}
+	residuals := make(map[uint32]spilled)
 
 	cb, err := loadCb(codebookPath)
 	if err != nil {
@@ -180,56 +169,58 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 			}
 		}
 
-		residuals[idx] = residual
+		ref, err := keep(residual)
+		if err != nil {
+			return received, err
+		}
+		residuals[idx] = ref
 	}
 	received = counted.n
 
 	fmt.Printf("[Sync] Bitswap completo. %d chunks recebidos. Repackaging...\n", len(residuals))
 
-	// 2. Index the residuals of the local version, which may be at other positions
+	// 2. Keep from the local version the residuals the new one still uses, wherever they are
 	type chunkKey struct{ CodebookID, DeltaHash uint64 }
-	local := make(map[chunkKey][]byte)
+	needed := make(map[chunkKey]bool, len(manifest.Entries))
+	for i, e := range manifest.Entries {
+		if _, ok := residuals[uint32(i)]; !ok {
+			needed[chunkKey{e.CodebookID, e.DeltaHash}] = true
+		}
+	}
+	local := make(map[chunkKey]spilled)
 	if f, err := os.Open(outPath); err == nil {
+		defer f.Close()
 		reader := format.NewReader(f)
 		lHeader, lBlockTable, lEnts, rStream, err := reader.ReadStream(encryptionKey)
-		if err == nil {
-			var derivedKey []byte
-			if lHeader.IsEncrypted {
-				derivedKey = crypto.DeriveKey([]byte(encryptionKey), lHeader.Salt[:])
-			}
+		if err == nil && lHeader.ChunkCount > 0 {
 			var localDict []byte
 			if lHeader.UsesBrainDict {
 				localDict = brainDict
 			}
-			var pool []byte
-			for i, blockSize := range lBlockTable {
-				blockData := make([]byte, blockSize)
-				if _, err := io.ReadFull(rStream, blockData); err != nil {
-					f.Close()
-					return received, fmt.Errorf("bitswap: read local block %d: %w", i, err)
-				}
-				if lHeader.IsEncrypted {
-					if blockData, err = crypto.Decrypt(derivedKey, blockData); err != nil {
-						f.Close()
-						return received, fmt.Errorf("bitswap: decrypt local block %d: %w", i, err)
+			err = cromsync.ForEachBlock(rStream, lHeader, lBlockTable, lEnts, localDict, encryptionKey, nil, func(first, end int, pool []byte) error {
+				base := lEnts[first].DeltaOffset
+				for _, le := range lEnts[first:end] {
+					from := le.DeltaOffset - base
+					to := from + uint64(le.DeltaSize)
+					if to > uint64(len(pool)) {
+						continue
+					}
+					res := pool[from:to]
+					key := chunkKey{le.CodebookID, xxhash.Sum64(res)}
+					if _, have := local[key]; needed[key] && !have {
+						ref, err := keep(res)
+						if err != nil {
+							return err
+						}
+						local[key] = ref
 					}
 				}
-				decompressed, err := delta.DecompressPoolDict(blockData, localDict)
-				if err != nil {
-					f.Close()
-					return received, fmt.Errorf("bitswap: decompress local block %d: %w", i, err)
-				}
-				pool = append(pool, decompressed...)
-			}
-			for _, le := range lEnts {
-				end := le.DeltaOffset + uint64(le.DeltaSize)
-				if end <= uint64(len(pool)) {
-					res := pool[le.DeltaOffset:end]
-					local[chunkKey{le.CodebookID, xxhash.Sum64(res)}] = res
-				}
+				return nil
+			})
+			if err != nil {
+				return received, fmt.Errorf("bitswap: read local version: %w", err)
 			}
 		}
-		f.Close()
 	}
 
 	// 3. Rebuild the .crom file from the manifest and the received residuals
@@ -285,11 +276,17 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 		startIdx, endIdx := format.BlockRange(blockStarts, b, len(finalEntries))
 
 		for idx := startIdx; idx < endIdx; idx++ {
-			res, ok := residuals[uint32(idx)]
+			ref, ok := residuals[uint32(idx)]
 			if !ok {
 				e := manifest.Entries[idx]
-				if res, ok = local[chunkKey{e.CodebookID, e.DeltaHash}]; !ok {
+				if ref, ok = local[chunkKey{e.CodebookID, e.DeltaHash}]; !ok {
 					return received, fmt.Errorf("bitswap: missing chunk %d for reconstruction", idx)
+				}
+			}
+			res := make([]byte, ref.size)
+			if ref.size > 0 {
+				if _, err := spill.ReadAt(res, ref.off); err != nil {
+					return received, fmt.Errorf("bitswap: read residual: %w", err)
 				}
 			}
 

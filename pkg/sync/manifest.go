@@ -14,11 +14,11 @@ import (
 	"io"
 	"os"
 
-	"github.com/cespare/xxhash/v2"
 	"github.com/MrJc01/crompressor/internal/codebook"
 	"github.com/MrJc01/crompressor/internal/crypto"
 	"github.com/MrJc01/crompressor/internal/delta"
 	"github.com/MrJc01/crompressor/pkg/format"
+	"github.com/cespare/xxhash/v2"
 )
 
 // ManifestVersion is the current version of the manifest protocol.
@@ -39,16 +39,60 @@ type ChunkManifest struct {
 
 // ManifestEntry represents a single chunk's identity in the manifest.
 type ManifestEntry struct {
-	CodebookID uint64 `json:"codebook_id"` // The Codebook pattern used
-	DeltaHash  uint64 `json:"delta_hash"`  // xxhash of the XOR residual
-	ChunkSize  uint32 `json:"chunk_size"`  // Original uncompressed size of this chunk
-	CodebookIndex uint8 `json:"codebook_index"` // Which brain or engine rebuilds this chunk
+	CodebookID    uint64 `json:"codebook_id"`    // The Codebook pattern used
+	DeltaHash     uint64 `json:"delta_hash"`     // xxhash of the XOR residual
+	ChunkSize     uint32 `json:"chunk_size"`     // Original uncompressed size of this chunk
+	CodebookIndex uint8  `json:"codebook_index"` // Which brain or engine rebuilds this chunk
 }
 
 // DiffResult holds the result of comparing two manifests.
 type DiffResult struct {
 	Missing []ManifestEntry `json:"missing"` // Entries in remote but not in local
 	Extra   []ManifestEntry `json:"extra"`   // Entries in local but not in remote
+}
+
+// ForEachBlock reads the delta pool from r and calls fn with each decompressed block
+// and its [first, end) chunk range. Blocks for which want returns false are skipped.
+func ForEachBlock(r io.Reader, header *format.Header, blockTable []uint32, entries []format.ChunkEntry, dict []byte, encryptionKey string, want func(first, end int) bool, fn func(first, end int, pool []byte) error) error {
+	if header.Version < format.Version2 {
+		return fmt.Errorf("sync: version %d is not supported", header.Version)
+	}
+	starts := format.BlockStarts(entries)
+	if len(starts) != len(blockTable) {
+		return fmt.Errorf("sync: chunk table describes %d blocks, block table has %d", len(starts), len(blockTable))
+	}
+	var derivedKey []byte
+	if header.IsEncrypted {
+		derivedKey = crypto.DeriveKey([]byte(encryptionKey), header.Salt[:])
+	}
+	for i, blockSize := range blockTable {
+		first, end := format.BlockRange(starts, i, len(entries))
+		if want != nil && !want(first, end) {
+			if _, err := io.CopyN(io.Discard, r, int64(blockSize)); err != nil {
+				return fmt.Errorf("sync: skip block %d: %w", i, err)
+			}
+			continue
+		}
+		blockData := make([]byte, blockSize)
+		if _, err := io.ReadFull(r, blockData); err != nil {
+			return fmt.Errorf("sync: read block %d: %w", i, err)
+		}
+		if header.IsEncrypted {
+			dec, err := crypto.Decrypt(derivedKey, blockData)
+			if err != nil {
+				return fmt.Errorf("sync: decrypt block %d: %w", i, err)
+			}
+			blockData = dec
+		}
+		pool, err := delta.DecompressPoolDict(blockData, dict)
+		if err != nil {
+			return fmt.Errorf("sync: decompress block %d: %w", i, err)
+		}
+		if err := fn(first, end, pool); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GenerateManifest reads a .crom file and produces a ChunkManifest.
@@ -72,63 +116,32 @@ func GenerateManifest(cromFile string, codebookPath string, encryptionKey string
 		return nil, fmt.Errorf("manifest: parse error in %s: %w", cromFile, err)
 	}
 
-	// Decompress all blocks to get the full uncompressed delta pool
-	var uncompressedPool []byte
-
-	if header.Version >= format.Version2 {
-		var derivedKey []byte
-		if header.IsEncrypted {
-			derivedKey = crypto.DeriveKey([]byte(encryptionKey), header.Salt[:])
-		}
-
-		for i, blockSize := range blockTable {
-			blockData := make([]byte, blockSize)
-			if _, err := io.ReadFull(rStream, blockData); err != nil {
-				return nil, fmt.Errorf("manifest: unexpected end of delta pool at block %d", i)
-			}
-
-			if header.IsEncrypted {
-				dec, err := crypto.Decrypt(derivedKey, blockData)
-				if err != nil {
-					return nil, fmt.Errorf("manifest: decrypt block %d: %w", i, err)
-				}
-				blockData = dec
-			}
-
-			var dict []byte
-			if header.UsesBrainDict {
-				dict = cb.Dictionary()
-			}
-			decompressed, err := delta.DecompressPoolDict(blockData, dict)
-			if err != nil {
-				return nil, fmt.Errorf("manifest: decompress block %d: %w", i, err)
-			}
-			uncompressedPool = append(uncompressedPool, decompressed...)
-		}
-	} else {
-		compDeltaPool, _ := io.ReadAll(rStream)
-		uncompressedPool, err = delta.DecompressPool(compDeltaPool)
-		if err != nil {
-			return nil, fmt.Errorf("manifest: decompress delta pool: %w", err)
-		}
-	}
-
-	// Build manifest entries by hashing each chunk's delta residual
+	// Hash each chunk's residual one block at a time, so memory does not grow with the file
 	manifestEntries := make([]ManifestEntry, len(entries))
-	for i, entry := range entries {
-		endOffset := entry.DeltaOffset + uint64(entry.DeltaSize)
-		if endOffset > uint64(len(uncompressedPool)) {
-			return nil, fmt.Errorf("manifest: delta bounds error for chunk %d", i)
+	var dict []byte
+	if header.UsesBrainDict {
+		dict = cb.Dictionary()
+	}
+	err = ForEachBlock(rStream, header, blockTable, entries, dict, encryptionKey, nil, func(first, end int, pool []byte) error {
+		base := entries[first].DeltaOffset
+		for i := first; i < end; i++ {
+			entry := entries[i]
+			from := entry.DeltaOffset - base
+			to := from + uint64(entry.DeltaSize)
+			if to > uint64(len(pool)) {
+				return fmt.Errorf("manifest: delta bounds error for chunk %d", i)
+			}
+			manifestEntries[i] = ManifestEntry{
+				CodebookID:    entry.CodebookID,
+				DeltaHash:     xxhash.Sum64(pool[from:to]),
+				ChunkSize:     entry.OriginalSize,
+				CodebookIndex: entry.CodebookIndex,
+			}
 		}
-
-		residual := uncompressedPool[entry.DeltaOffset:endOffset]
-
-		manifestEntries[i] = ManifestEntry{
-			CodebookID: entry.CodebookID,
-			DeltaHash:  xxhash.Sum64(residual),
-			ChunkSize:  entry.OriginalSize,
-			CodebookIndex: entry.CodebookIndex,
-		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("manifest: %w", err)
 	}
 
 	manifest := &ChunkManifest{
