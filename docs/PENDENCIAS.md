@@ -8,13 +8,22 @@
 
 ## Prioridade alta
 
-- [ ] Melhorar dados novos: um cérebro entre projetos fica perto do zstd puro em projetos que
-      não viu. Investigar arquivos menores que o bloco e o dicionário limitado a 32 MB.
+- [ ] Testar o cenário do provedor, do artigo: cérebro treinado com o histórico e versões
+      consecutivas de dados reais (`node_modules`, imagens Docker). Medir quanto ele ainda
+      serve conforme os dados mudam.
+- [ ] Atualizar o cérebro: testar `train --update` sem invalidar os `.crom` existentes.
+- [ ] Demonstração com duas VMs trocando dados pelo cérebro.
 - [ ] Testar acima de 1,4 GB, com o cérebro final grande (ele precisa caber na RAM).
-- [ ] Acelerar literais: 500 MB de dados novos levam quase 3 min, e `--max-compression`, 22 min.
+
+## Ideia: vídeo em cima de um projeto existente
+
+- [ ] Avaliar, a partir de um repositório como `crom-crompressor-ar`, comprimir horas de vídeo
+      sem perda perceptível, com codebook treinado, deduplicação e montadores do arquivo final.
+      O bitstream já comprimido não deduplica: testar em quadros decodificados ou blocos do codec.
 
 ## Prioridade média
 
+- [ ] Melhorar dados novos, hoje perto do zstd puro, e acelerar literais.
 - [ ] Relay para dois lados atrás de NAT sem porta aberta (exige servidor público).
 - [ ] Testar `train --update` e os `.crom` antigos quando o cérebro muda.
 - [ ] Auditoria externa de segurança do `pull` e do `daemon`.
