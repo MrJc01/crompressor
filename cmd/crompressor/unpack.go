@@ -18,8 +18,8 @@ func unpackCmd() *cobra.Command {
 		Short: "Decompress a .crom file",
 		Long:  `Reads the .crom file, looks up patterns in the codebook, and reconstructs the original file.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if input == "" || output == "" || codebookPath == "" {
-				return fmt.Errorf("flags --input, --output and --codebook are required")
+			if input == "" || output == "" {
+				return fmt.Errorf("flags --input and --output are required")
 			}
 
 			fmt.Println("╔═══════════════════════════════════════════╗")
@@ -27,7 +27,9 @@ func unpackCmd() *cobra.Command {
 			fmt.Println("╠═══════════════════════════════════════════╣")
 			fmt.Printf("║  Input:    %-30s ║\n", input)
 			fmt.Printf("║  Output:   %-30s ║\n", output)
-			fmt.Printf("║  Codebook: %-30s ║\n", codebookPath)
+			if codebookPath != "" {
+				fmt.Printf("║  Codebook: %-30s ║\n", codebookPath)
+			}
 			if fuzziness > 0 {
 				fmt.Printf("║  Fuzziness: %-29.2f ║\n", fuzziness)
 			}
@@ -51,7 +53,7 @@ func unpackCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&input, "input", "i", "", "Input .crom file path")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output restored file path")
-	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Codebook path (.cromdb)")
+	cmd.Flags().StringVarP(&codebookPath, "codebook", "c", "", "Codebook path (.cromdb); optional if the file carries its own")
 	cmd.Flags().Float64Var(&fuzziness, "fuzziness", 0.0, "Reconstruction variance (0 = lossless)")
 	cmd.Flags().StringVar(&encryptionKey, "encrypt", "", "Passphrase for AES-256-GCM decryption")
 	cmd.Flags().BoolVar(&strict, "strict", true, "Abort on any corrupted block; --strict=false keeps a damaged output")

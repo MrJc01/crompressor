@@ -99,7 +99,8 @@ func Grep(target string, inputPath string, codebookPath string) error {
 	hSize := format.HeaderSizeV2
 	if header.Version == format.Version4 { hSize = format.HeaderSizeV4 }
 	if header.Version == format.Version5 { hSize = format.HeaderSizeV5 }
-	if header.Version >= format.Version6 { hSize = format.HeaderSizeV6 }
+	if header.Version == format.Version6 || header.Version == format.Version7 { hSize = format.HeaderSizeV6 }
+	if header.Version >= format.Version8 { hSize = format.HeaderSizeV8 + int(header.MicroDictSize) }
 
 	baseOffset := int64(hSize + len(blockTable)*4 + tableSize)
 	blockOffsets := make([]int64, len(blockTable))

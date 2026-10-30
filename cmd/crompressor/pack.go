@@ -22,6 +22,7 @@ func packCmd() *cobra.Command {
 	var streamMode bool
 	var brainDir string
 	var packMode string
+	var embedBrain bool
 
 	cmd := &cobra.Command{
 		Use:   "pack",
@@ -44,7 +45,7 @@ func packCmd() *cobra.Command {
 				}
 				cb, result, err := router.SelectBrain(input)
 				if err != nil {
-					fmt.Printf("No suitable brain found for '%s'. Activating Auto-Training...\n", result.Category)
+					fmt.Printf("No suitable brain found for '%s'. Compressing this file on its own.\n", result.Category)
 					useAutoTrain = true
 					det = result
 				} else {
@@ -52,7 +53,7 @@ func packCmd() *cobra.Command {
 					det = result
 				}
 			} else if codebookPath == "" {
-				fmt.Println("Zero-Config mode: No codebook provided. Activating Auto-Training...")
+				fmt.Println("Zero-Config mode: no codebook, compressing this file on its own.")
 				useAutoTrain = true
 			}
 
@@ -93,6 +94,7 @@ func packCmd() *cobra.Command {
 			opts.UseCDC = useCDC
 			opts.MultiPass = multiPass
 			opts.Mode = packMode
+			opts.EmbedBrain = embedBrain
 			if encryptionKey != "" {
 				opts.EncryptionKey = encryptionKey
 			}
@@ -167,6 +169,7 @@ func packCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&multiPass, "multi-pass", false, "Enable two-pass LSH Top-K compression")
 	cmd.Flags().BoolVar(&streamMode, "stream", false, "Stream mode — compress pipes/stdin without Seek")
 	cmd.Flags().StringVar(&encryptionKey, "encrypt", "", "Passphrase for AES-256-GCM encryption")
+	cmd.Flags().BoolVar(&embedBrain, "embed-brain", false, "Store the codebook inside the .crom, for a receiver that does not have it")
 	cmd.Flags().StringVar(&packMode, "mode", "archive", "Operation mode: 'archive' (lossless) or 'edge' (lossy)")
 
 	return cmd

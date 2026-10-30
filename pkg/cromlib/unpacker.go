@@ -31,17 +31,42 @@ func DefaultUnpackOptions() UnpackOptions {
 	}
 }
 
+// openBrain returns the brain embedded in the file or, without one, the one at path.
+func openBrain(header *format.Header, path, encryptionKey string) (*codebook.Reader, error) {
+	if header.MicroDictSize == 0 {
+		if path == "" {
+			return nil, fmt.Errorf("unpack: este arquivo precisa do cérebro usado no pack (--codebook)")
+		}
+		cb, err := codebook.Open(path)
+		if err != nil {
+			return nil, fmt.Errorf("unpack: failed to open codebook: %w", err)
+		}
+		return cb, nil
+	}
+	micro := header.MicroDictionaryData
+	if header.IsEncrypted {
+		dec, err := crypto.Decrypt(crypto.DeriveKey([]byte(encryptionKey), header.Salt[:]), micro)
+		if err != nil {
+			return nil, fmt.Errorf("unpack: decrypt embedded brain: %w", err)
+		}
+		micro = dec
+	}
+	brain, err := delta.DecompressPool(micro)
+	if err != nil {
+		return nil, fmt.Errorf("unpack: decompress embedded brain: %w", err)
+	}
+	cb, err := codebook.OpenFromBytes(brain)
+	if err != nil {
+		return nil, fmt.Errorf("unpack: open embedded brain: %w", err)
+	}
+	return cb, nil
+}
+
 // Unpack reads a .crom file, extracts the deltas, looks up the codewords,
 // rebuilds the original file directly to disk via streaming to prevent memory overflow.
 // The output only appears at outputPath after it passes the integrity check.
 func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) (err error) {
 	start := time.Now()
-
-	cb, err := codebook.Open(codebookPath)
-	if err != nil {
-		return fmt.Errorf("unpack: failed to open codebook: %w", err)
-	}
-	defer cb.Close()
 
 	inFile, err := os.Open(inputPath)
 	if err != nil {
@@ -53,6 +78,22 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) (err
 	header, blockTable, entries, rStream, err := reader.ReadStream(opts.EncryptionKey)
 	if err != nil {
 		return fmt.Errorf("unpack: parse format: %w", err)
+	}
+
+	// Files made only of literals need no brain, and some files carry their own.
+	needsBrain := false
+	for _, e := range entries {
+		if e.CodebookID != format.LiteralCodebookID && e.CodebookIndex != format.FractalCodebookIndex {
+			needsBrain = true
+			break
+		}
+	}
+	var cb *codebook.Reader
+	if needsBrain {
+		if cb, err = openBrain(header, codebookPath, opts.EncryptionKey); err != nil {
+			return err
+		}
+		defer cb.Close()
 	}
 
 	tmpPath := outputPath + ".tmp"
@@ -121,7 +162,10 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) (err
 		return nil
 	}
 
-	maxID := cb.CodewordCount() - 1
+	var maxID uint64
+	if cb != nil {
+		maxID = cb.CodewordCount() - 1
+	}
 
 	if header.Version >= format.Version2 {
 		var derivedKey []byte

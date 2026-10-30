@@ -175,3 +175,67 @@ func TestPackBytesWithSharedBrain(t *testing.T) {
 		t.Fatal("restored bytes differ")
 	}
 }
+
+func TestZeroConfigRestoresWithoutCodebook(t *testing.T) {
+	for _, key := range []string{"", "segredo"} {
+		dir := t.TempDir()
+		var data []byte
+		for i := 0; len(data) < 3*1024*1024; i++ {
+			data = append(data, []byte("2026-10-30 INFO api GET /v1/items/")...)
+			data = append(data, byte('0'+i%10), byte('0'+i%7), '\n')
+		}
+		in := filepath.Join(dir, "in.log")
+		os.WriteFile(in, data, 0644)
+		packed := filepath.Join(dir, "in.crom")
+		opts := DefaultPackOptions()
+		opts.EncryptionKey = key
+		if _, err := AutoPack(in, packed, opts); err != nil {
+			t.Fatal(err)
+		}
+		uopts := DefaultUnpackOptions()
+		uopts.EncryptionKey = key
+		out := filepath.Join(dir, "out.log")
+		if err := Unpack(packed, out, "", uopts); err != nil {
+			t.Fatalf("key %q: %v", key, err)
+		}
+		if got, _ := os.ReadFile(out); !bytes.Equal(got, data) {
+			t.Fatalf("key %q: restored file differs", key)
+		}
+	}
+}
+
+func TestEmbeddedBrainRestoresWithoutCodebook(t *testing.T) {
+	for _, key := range []string{"", "segredo"} {
+		dir := t.TempDir()
+		data := randomBytes(256 * 1024)
+		brain := trainBrain(t, dir, data)
+		in := filepath.Join(dir, "in.bin")
+		os.WriteFile(in, data, 0644)
+		packed := filepath.Join(dir, "in.crom")
+		opts := DefaultPackOptions()
+		opts.EmbedBrain = true
+		opts.EncryptionKey = key
+		if _, err := Pack(in, packed, brain, opts); err != nil {
+			t.Fatal(err)
+		}
+		uopts := DefaultUnpackOptions()
+		uopts.EncryptionKey = key
+		out := filepath.Join(dir, "out.bin")
+		if err := Unpack(packed, out, "", uopts); err != nil {
+			t.Fatalf("key %q: %v", key, err)
+		}
+		if got, _ := os.ReadFile(out); !bytes.Equal(got, data) {
+			t.Fatalf("key %q: restored file differs", key)
+		}
+	}
+}
+
+func TestFileThatNeedsBrainExplainsIt(t *testing.T) {
+	dir := t.TempDir()
+	data := randomBytes(64 * 1024)
+	brain := trainBrain(t, dir, data)
+	packRoundTrip(t, dir, brain, data)
+	if err := Unpack(filepath.Join(dir, "in.crom"), filepath.Join(dir, "x"), "", DefaultUnpackOptions()); err == nil {
+		t.Fatal("expected an error without the brain")
+	}
+}

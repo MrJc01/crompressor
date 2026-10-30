@@ -39,7 +39,7 @@ type PackOptions struct {
 	UseACAC       bool   // If true, overrides CDC and uses Advanced Content-Aware Chunking
 	ACACDelimiter byte   // Delimiter char for ACAC (e.g. '\n' or ',')
 	MultiPass     bool   // If true, restricts codebook usage to Top-256 patterns via two-pass
-	AllowEpigenesis bool // If true, generates in-band Metamorphic Micro-Brain from frequent bypassed literals (V8)
+	EmbedBrain    bool   // If true, stores the codebook inside the .crom, which then restores on its own (V8)
 	// Callback for progress bar integration, called with bytes processed
 	OnProgress func(bytesProcessed int)
 }
@@ -111,7 +111,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	}
 	// With a brain, even high-entropy data may already be known to the receiver.
 	hasBrain := codebookPath != "" || len(opts.CodebookPaths) > 0
-	isPassthrough := !hasBrain && opts.Mode != "edge" && (entropy.DetectHeuristicBypass(eScore, startBytes) || entropy.IsLowEntropy(eScore))
+	isPassthrough := !hasBrain && opts.Mode != "edge" && entropy.DetectHeuristicBypass(eScore, startBytes)
 
 	// Adaptive Chunk Size Configuration
 	if opts.ChunkSize <= 0 {
@@ -184,7 +184,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		ChunkCount:    numEstimatedChunks,
 		IsPassthrough: isPassthrough,
 		ChunkSize:     uint32(opts.ChunkSize),
-		IsLossy:       opts.Mode == "edge",
+		IsLossy:       hasBrain && opts.Mode == "edge",
 	}
 
 	if len(cbs) > 0 {
@@ -394,6 +394,19 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 					defer wg.Done()
 					for i := range jobs {
 						chunk := chunks[i]
+
+						if len(searchers) == 0 {
+							results[i] = processedChunk{
+								res: chunk.Data,
+								entry: format.ChunkEntry{
+									CodebookID:    format.LiteralCodebookID,
+									CodebookIndex: format.LiteralCodebookIndex,
+									DeltaSize:     uint32(len(chunk.Data)),
+									OriginalSize:  uint32(chunk.Size),
+								},
+							}
+							continue
+						}
 
 						// The receiver already has this chunk: only its ID travels.
 						exactFound := false
@@ -644,13 +657,26 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	}
 	suggestMicroBrain := maxReps > 1000
 
-	if opts.AllowEpigenesis && suggestMicroBrain && len(literalFreq) > 0 {
-		// Collect all unique literal patterns for the Micro-Brain
-		// The literalFreq map holds FNV hashes. We need the actual bytes.
-		// Build the micro-codebook from the raw literal residuals captured during pack.
-		// For the V14 MVP, we serialize a minimal .cromdb in-memory from the
-		// most frequent literal patterns' content captured in literalPatterns.
+	if opts.EmbedBrain {
+		brain, err := os.ReadFile(codebookPath)
+		if err != nil {
+			return nil, fmt.Errorf("pack: read brain to embed: %w", err)
+		}
+		micro, err := delta.CompressPool(brain)
+		if err != nil {
+			return nil, fmt.Errorf("pack: compress embedded brain: %w", err)
+		}
+		if header.IsEncrypted {
+			if micro, err = crypto.Encrypt(derivedKey, micro); err != nil {
+				return nil, fmt.Errorf("pack: encrypt embedded brain: %w", err)
+			}
+		}
+		if uint64(len(micro)) > uint64(format.MaxMicroDictSize) {
+			return nil, fmt.Errorf("pack: embedded brain of %d bytes exceeds the format limit", len(micro))
+		}
 		header.Version = format.Version8
+		header.MicroDictSize = uint32(len(micro))
+		header.MicroDictionaryData = micro
 	}
 
 	if header.Version < format.Version8 && opts.UseConvergentEncryption {
@@ -744,6 +770,8 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		outFile.Seek(0, 0)
 
 		header.ChunkCount = 0 // Mark as passthrough
+		header.MicroDictSize = 0
+		header.MicroDictionaryData = nil
 
 		// Write placeholder header first
 		if _, err := outFile.Write(header.Serialize()); err != nil {
