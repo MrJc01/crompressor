@@ -29,23 +29,34 @@ import (
 //
 //	tail -f /var/log/syslog | crompressor pack --stream -c dict.cromdb -o out.crom
 func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOptions) (*Metrics, error) {
-	cb, err := codebook.Open(codebookPath)
-	if err != nil {
-		return nil, fmt.Errorf("stream: open codebook: %w", err)
+	var cb *codebook.Reader
+	var searcher *search.LSHSearcher
+	if codebookPath != "" {
+		var err error
+		if cb, err = codebook.Open(codebookPath); err != nil {
+			return nil, fmt.Errorf("stream: open codebook: %w", err)
+		}
+		defer cb.Close()
+		searcher = search.NewLSHSearcher(cb)
 	}
-	defer cb.Close()
-
-	searcher := search.NewLSHSearcher(cb)
 
 	var fc chunker.Chunker
 	chunkSize := opts.ChunkSize
 	if chunkSize == 0 {
 		chunkSize = 128
 	}
+	if cb == nil {
+		chunkSize = noBrainChunkSize
+	} else if !opts.UseCDC && !opts.UseACAC {
+		// Chunks must have the size of the codewords to match them exactly.
+		chunkSize = int(cb.CodewordSize())
+	}
 	if opts.UseACAC {
 		fc = chunker.NewSemanticChunker(opts.ACACDelimiter, chunkSize*8)
 	} else if opts.UseCDC {
 		fc = chunker.NewFastCDCChunker(chunkSize)
+	} else if cb != nil && chunkSize >= search.AlignedMinCodewordSize {
+		fc = search.NewAlignedChunker(cb)
 	} else {
 		fc = chunker.NewFixedChunker(chunkSize)
 	}
@@ -110,18 +121,30 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 					for i := range jobs {
 						c := chunks[i]
 						
-						// EXPERT ROUTING: Entropy-based Passthrough
-						chunkEntropy := entropy.Shannon(c.Data)
-						if chunkEntropy > 7.8 {
+						literal := processedChunk{
+							entry: format.ChunkEntry{
+								CodebookID:   format.LiteralCodebookID,
+								DeltaSize:    uint32(len(c.Data)),
+								OriginalSize: uint32(len(c.Data)),
+							},
+							res: c.Data,
+						}
+						if searcher == nil {
+							results[i] = literal
+							continue
+						}
+
+						// The receiver already has this chunk: only its ID travels.
+						if id, ok := searcher.FindExact(c.Data); ok {
 							results[i] = processedChunk{
-								entry: format.ChunkEntry{
-									CodebookID:   format.LiteralCodebookID,
-									DeltaSize:    uint32(len(c.Data)),
-									OriginalSize: uint32(len(c.Data)),
-								},
-								res: c.Data,
-								sim: 0.0,
+								entry: format.ChunkEntry{CodebookID: id, OriginalSize: uint32(len(c.Data))},
+								sim:   1.0,
 							}
+							continue
+						}
+
+						if opts.Mode != "edge" && entropy.Shannon(c.Data) > 7.8 {
+							results[i] = literal
 							continue
 						}
 
@@ -131,8 +154,16 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 							continue
 						}
 
+						sim := match.Similarity(len(c.Data) * 8)
+						if sim < minNearMatchSimilarity && opts.Mode != "edge" {
+							results[i] = literal
+							continue
+						}
+
 						residual := delta.XOR(c.Data, match.Pattern)
-						sim := 1.0 - float64(match.Distance)/float64(len(c.Data)*8)
+						if opts.Mode == "edge" {
+							residual = []byte{}
+						}
 
 						results[i] = processedChunk{
 							entry: format.ChunkEntry{
@@ -218,6 +249,8 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 		ChunkCount:   uint32(len(allEntries)),
 		OriginalHash: hashArr,
 		MerkleRoot:   merkleRoot,
+		ChunkSize:    uint32(chunkSize),
+		IsLossy:      cb != nil && opts.Mode == "edge",
 	}
 
 	headerBytes := header.Serialize()

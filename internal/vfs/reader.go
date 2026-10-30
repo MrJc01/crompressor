@@ -113,6 +113,9 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 	
 	// Fast path for Passthrough files (0 chunks or IsPassthrough flag)
 	if rr.header.ChunkCount == 0 || rr.header.IsPassthrough {
+		if rr.header.IsEncrypted {
+			return 0, fmt.Errorf("vfs: encrypted passthrough files cannot be mounted, use unpack")
+		}
 		return rr.file.ReadAt(dest, rr.dataOffset+off)
 	}
 

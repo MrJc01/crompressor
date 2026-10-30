@@ -266,6 +266,39 @@ func TestEncryptedPassthroughIsEncryptedAndRestores(t *testing.T) {
 	}
 }
 
+func TestPackStreamWithSharedBrain(t *testing.T) {
+	dir := t.TempDir()
+	data := randomBytes(1024 * 1024)
+	brain := trainBrain(t, dir, data)
+	shifted := append([]byte("X"), data...)
+
+	packed := filepath.Join(dir, "s.crom")
+	if _, err := PackStream(bytes.NewReader(shifted), packed, brain, DefaultPackOptions()); err != nil {
+		t.Fatal(err)
+	}
+	if info, _ := os.Stat(packed); info.Size() > int64(len(data)/50) {
+		t.Errorf("packed to %d bytes, want references only", info.Size())
+	}
+	out := filepath.Join(dir, "s.out")
+	if err := Unpack(packed, out, brain, DefaultUnpackOptions()); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(out); !bytes.Equal(got, shifted) {
+		t.Fatal("restored file differs")
+	}
+
+	noBrain := filepath.Join(dir, "n.crom")
+	if _, err := PackStream(bytes.NewReader(shifted), noBrain, "", DefaultPackOptions()); err != nil {
+		t.Fatal(err)
+	}
+	if err := Unpack(noBrain, out, "", DefaultUnpackOptions()); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(out); !bytes.Equal(got, shifted) {
+		t.Fatal("restored file differs without a brain")
+	}
+}
+
 func TestFileThatNeedsBrainExplainsIt(t *testing.T) {
 	dir := t.TempDir()
 	data := randomBytes(64 * 1024)
