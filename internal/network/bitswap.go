@@ -188,6 +188,18 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 	}
 	copy(fileHeader.OriginalHash[:], manifest.OriginalHash[:])
 
+	// With a key on this node, the rebuilt file stays encrypted at rest.
+	var newKey []byte
+	if encryptionKey != "" {
+		salt, err := crypto.GenerateSalt()
+		if err != nil {
+			return received, fmt.Errorf("bitswap: generate salt: %w", err)
+		}
+		copy(fileHeader.Salt[:], salt)
+		fileHeader.IsEncrypted = true
+		newKey = crypto.DeriveKey([]byte(encryptionKey), salt)
+	}
+
 	finalEntries := make([]format.ChunkEntry, manifest.ChunkCount)
 	for i, e := range manifest.Entries {
 		finalEntries[i] = format.ChunkEntry{
@@ -199,6 +211,9 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 	blockStarts := format.BlockStarts(finalEntries)
 
 	metadataSize := int64(len(fileHeader.Serialize())) + int64(len(blockStarts))*4 + int64(manifest.ChunkCount)*int64(format.GetEntrySize(format.Version7))
+	if fileHeader.IsEncrypted {
+		metadataSize += 28 // AES-GCM overhead of the chunk table
+	}
 	if _, err := outFile.Seek(metadataSize, 0); err != nil {
 		return received, err
 	}
@@ -229,6 +244,11 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 		if err != nil {
 			return received, fmt.Errorf("bitswap: repack compress block: %w", err)
 		}
+		if fileHeader.IsEncrypted {
+			if compBlock, err = crypto.Encrypt(newKey, compBlock); err != nil {
+				return received, fmt.Errorf("bitswap: encrypt block: %w", err)
+			}
+		}
 
 		blockTable = append(blockTable, uint32(len(compBlock)))
 		if _, err := outFile.Write(compBlock); err != nil {
@@ -243,7 +263,13 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 	if _, err := outFile.Seek(0, 0); err != nil {
 		return received, err
 	}
-	for _, part := range [][]byte{fileHeader.Serialize(), blockTableRaw, format.SerializeChunkTable(finalEntries, format.Version7)} {
+	tableData := format.SerializeChunkTable(finalEntries, format.Version7)
+	if fileHeader.IsEncrypted {
+		if tableData, err = crypto.Encrypt(newKey, tableData); err != nil {
+			return received, fmt.Errorf("bitswap: encrypt chunk table: %w", err)
+		}
+	}
+	for _, part := range [][]byte{fileHeader.Serialize(), blockTableRaw, tableData} {
 		if _, err := outFile.Write(part); err != nil {
 			return received, err
 		}

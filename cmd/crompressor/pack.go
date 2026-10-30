@@ -115,6 +115,9 @@ func packCmd() *cobra.Command {
 					reader = f
 				}
 
+				if useAutoTrain {
+					codebookPath = ""
+				}
 				metrics, err := cromlib.PackStream(reader, output, codebookPath, opts)
 				if err != nil {
 					return fmt.Errorf("stream pack error: %v", err)

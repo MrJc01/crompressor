@@ -23,6 +23,12 @@ func TestTwoNodeSync(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
+	t.Run("plain", func(t *testing.T) { runTwoNodeSync(t, "") })
+	t.Run("encrypted", func(t *testing.T) { runTwoNodeSync(t, "segredo") })
+}
+
+func runTwoNodeSync(t *testing.T, key string) {
+	t.Setenv("CROM_TEST_DISABLE_MDNS", "1")
 
 	// 1. Setup Data Dirs
 	dirA := t.TempDir()
@@ -54,7 +60,9 @@ func TestTwoNodeSync(t *testing.T) {
 		if err := os.WriteFile(src, data, 0644); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := cromlib.Pack(src, filepath.Join(dir, "source.bin.crom"), codebookPath, cromlib.DefaultPackOptions()); err != nil {
+		packOpts := cromlib.DefaultPackOptions()
+		packOpts.EncryptionKey = key
+		if _, err := cromlib.Pack(src, filepath.Join(dir, "source.bin.crom"), codebookPath, packOpts); err != nil {
 			t.Fatalf("Failed to pack file: %v", err)
 		}
 	}
@@ -62,7 +70,7 @@ func TestTwoNodeSync(t *testing.T) {
 	pack(oldData, dirB)
 
 	// 4. Start Node A (Sender)
-	nodeA, err := NewCromNode(codebookPath, 0, dirA, "") // port 0 = random
+	nodeA, err := NewCromNode(codebookPath, 0, dirA, key) // port 0 = random
 	if err != nil {
 		t.Fatalf("Failed to start Node A: %v", err)
 	}
@@ -84,7 +92,7 @@ func TestTwoNodeSync(t *testing.T) {
 	peerInfoA, _ := peer.AddrInfoFromP2pAddr(maA)
 
 	// 5. Start Node B (Receiver)
-	nodeB, err := NewCromNode(codebookPath, 0, dirB, "")
+	nodeB, err := NewCromNode(codebookPath, 0, dirB, key)
 	if err != nil {
 		t.Fatalf("Failed to start Node B: %v", err)
 	}
@@ -134,7 +142,18 @@ func TestTwoNodeSync(t *testing.T) {
 	}
 
 	restoredFileB := filepath.Join(dirB, "restored.bin")
-	if err := cromlib.Unpack(cromFileB, restoredFileB, codebookPath, cromlib.DefaultUnpackOptions()); err != nil {
+	if key != "" {
+		raw, err := os.ReadFile(cromFileB)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(raw, testData[5000:5064]) || !bytes.Contains(raw[:8], []byte("CROM")) {
+			t.Error("synced file should be an encrypted .crom")
+		}
+	}
+	unpackOpts := cromlib.DefaultUnpackOptions()
+	unpackOpts.EncryptionKey = key
+	if err := cromlib.Unpack(cromFileB, restoredFileB, codebookPath, unpackOpts); err != nil {
 		t.Fatalf("Failed to unpack synchronized file: %v", err)
 	}
 

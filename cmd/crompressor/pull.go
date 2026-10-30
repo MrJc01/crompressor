@@ -46,8 +46,16 @@ func pullCmd() *cobra.Command {
 			if err := node.Host.Connect(ctx, *info); err != nil {
 				return fmt.Errorf("falha ao conectar: %w", err)
 			}
-			if err := node.AuthenticatePeer(ctx, info.ID); err != nil {
-				return fmt.Errorf("falha na autenticação: %w", err)
+			// mDNS may start a handshake with the same peer at the same moment.
+			var authErr error
+			for attempt := 0; attempt < 3; attempt++ {
+				if authErr = node.AuthenticatePeer(ctx, info.ID); authErr == nil {
+					break
+				}
+				time.Sleep(300 * time.Millisecond)
+			}
+			if authErr != nil {
+				return fmt.Errorf("falha na autenticação: %w", authErr)
 			}
 			if err := syncProto.RequestSync(ctx, info.ID, file); err != nil {
 				return err
