@@ -101,6 +101,10 @@ func pullFromAnyPeer(ctx context.Context, node *network.CromNode, syncProto *net
 	var lastErr error
 	for ctx.Err() == nil {
 		for _, id := range node.Host.Network().Peers() {
+			// On a public DHT, most peers have nothing to do with CROM.
+			if ok, err := node.Host.Peerstore().SupportsProtocols(id, network.SyncProtocolID); err != nil || len(ok) == 0 {
+				continue
+			}
 			if err := authenticate(ctx, node, id); err != nil {
 				lastErr = err
 				continue
