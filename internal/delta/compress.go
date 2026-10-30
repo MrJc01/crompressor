@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/klauspost/compress/zstd"
 )
@@ -77,26 +78,43 @@ func brainDecoderOptions(dict []byte) []zstd.DOption {
 	return opts
 }
 
+// Building an encoder with a dictionary costs seconds, so the last one is kept.
+var (
+	brainEncoderMu   sync.Mutex
+	brainEncoder     *zstd.Encoder
+	brainEncoderDict *byte
+)
+
 // CompressPoolDict compresses a pool using the shared brain as a zstd dictionary, so
 // data that is only similar to the brain also benefits from it. A nil dict compresses plainly.
 func CompressPoolDict(pool, dict []byte) ([]byte, error) {
-	var buf bytes.Buffer
-	enc, err := zstd.NewWriter(&buf, brainEncoderOptions(dict)...)
-	if err != nil {
-		return nil, fmt.Errorf("delta: init zstd encoder: %w", err)
+	if len(pool) == 0 {
+		return []byte{}, nil // All chunks are references: there is nothing to compress
 	}
-	if _, err := enc.Write(pool); err != nil {
-		enc.Close()
-		return nil, fmt.Errorf("delta: compress pool: %w", err)
+	brainEncoderMu.Lock()
+	defer brainEncoderMu.Unlock()
+	var key *byte
+	if len(dict) > 0 {
+		key = &dict[0]
 	}
-	if err := enc.Close(); err != nil {
-		return nil, fmt.Errorf("delta: close zstd encoder: %w", err)
+	if brainEncoder == nil || brainEncoderDict != key {
+		enc, err := zstd.NewWriter(nil, brainEncoderOptions(dict)...)
+		if err != nil {
+			return nil, fmt.Errorf("delta: init zstd encoder: %w", err)
+		}
+		if brainEncoder != nil {
+			brainEncoder.Close()
+		}
+		brainEncoder, brainEncoderDict = enc, key
 	}
-	return buf.Bytes(), nil
+	return brainEncoder.EncodeAll(pool, nil), nil
 }
 
 // DecompressPoolDict reverses CompressPoolDict.
 func DecompressPoolDict(compressed, dict []byte) ([]byte, error) {
+	if len(compressed) == 0 {
+		return []byte{}, nil
+	}
 	dec, err := zstd.NewReader(bytes.NewReader(compressed), brainDecoderOptions(dict)...)
 	if err != nil {
 		return nil, fmt.Errorf("delta: init zstd decoder: %w", err)
