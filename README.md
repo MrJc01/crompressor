@@ -10,21 +10,18 @@
 
 ## O que é o Crompressor?
 
-O Crompressor é um motor de compressão construído sobre três primitivas compostas:
+Dois ou mais usuários instalam o mesmo **cérebro** (`.cromdb`). Depois disso, para enviar um arquivo que o cérebro já conhece, basta passar pela rede o que monta esse arquivo, e não o arquivo inteiro. O cérebro funciona como uma biblioteca compartilhada dos dados.
 
-- **Blocos** — A entrada é cortada em torno das entradas do cérebro, encontradas em qualquer posição por hash rolante, de modo que uma inserção não desalinha o resto do arquivo. `--cdc` ativa FastCDC, mas o cérebro é treinado com blocos fixos.
-- **Codebook** — Um bloco idêntico a uma entrada do cérebro vira só o ID dela (busca O(1) por hash). Um bloco quase igual usa a entrada mais próxima no mesmo balde, definido pelos 2 primeiros bytes.
-- **Dicionário** — O que não é idêntico é comprimido com zstd usando o cérebro como dicionário.
-- **XOR Delta** — Com entradas pequenas (abaixo de 1 KB), armazena o resíduo `Δᵢ = original XOR reconstruído` para reconstrução lossless quando necessário.
+Serve para coleções e versões de dados parecidos. **Não** substitui o zstd para comprimir um arquivo isolado, e o cérebro costuma ter quase o tamanho dos dados que aprendeu: o ganho vem de reaproveitá-lo em muitas transferências.
 
-O motor opera em dois modos distintos:
+| Caso (cérebro nos dois lados) | Original | Pela rede | Redução |
+|---|---|---|---|
+| Projeto que o cérebro já conhece | 27,55 MB | 0,0066 MB | 99,98% |
+| Versão real mais nova do projeto | 27,56 MB | 0,0152 MB | 99,94% |
+| 1 GB aleatório com 4 bytes inseridos | 1.000 MB | 0,88 MB | 99,91% |
+| Logs novos do mesmo formato | 7,14 MB | 1,19 MB | 83,33% |
 
-| Modo | Descrição | Compressão | Fidelidade |
-|------|-----------|------------|------------|
-| **Edge** | Lossy. Descarta o delta XOR e guarda só as referências. | ~25 bytes por bloco | Aproximada, só para dados que toleram erro |
-| **Archive** | Lossless. SHA-256 verificado no `unpack`; sem isso, nenhum arquivo é gravado. | Ver [Benchmarks](docs/benchmarks.md) | Bit-exact |
-
-Esses modos são mutuamente exclusivos por design. Escolher Edge significa aceitar erro de quantização (como GPTQ/AWQ). Escolher Archive significa obedecer aos limites de entropia de Shannon sobre o resíduo.
+Veja todos os números e como reproduzi-los em [Benchmarks](docs/benchmarks.md).
 
 ---
 
@@ -42,24 +39,26 @@ make build
 ## Quick Start
 
 ```bash
-# Treinar um codebook a partir de dados de exemplo
-crompressor train -i ./training_data/ -o codebook.cromdb --size 4096
+# Comprimir um arquivo sozinho: restaura sem cérebro
+crompressor pack -i dados.bin -o dados.crom
+crompressor unpack -i dados.crom -o restaurado.bin
 
-# Comprimir em modo Edge (lossy, rápido)
-crompressor pack -i dados.bin -o dados.crom --codebook codebook.cromdb --mode edge
+# Com um cérebro treinado
+crompressor train -i ./dados_de_exemplo/ -o cerebro.cromdb -k 4096 -s 40000
+crompressor pack -i dados.bin -o dados.crom -c cerebro.cromdb
+crompressor unpack -i dados.crom -o restaurado.bin -c cerebro.cromdb
 
-# Comprimir em modo Archive (lossless)
-crompressor pack -i dados.bin -o dados.crom --codebook codebook.cromdb --mode archive
-
-# Descomprimir
-crompressor unpack -i dados.crom -o restaurado.bin --codebook codebook.cromdb
-
-# Verificar round-trip lossless (somente modo Archive)
+# Conferir e inspecionar
 crompressor verify --original dados.bin --restored restaurado.bin
-
-# Inspecionar um arquivo .crom
 crompressor info -i dados.crom
 ```
+
+Opções do `pack`:
+
+- `--max-compression`: zstd nível 19, mais lento e menor. Exige um binário com CGO (o padrão do `make build`, se houver compilador C); restaurar não exige.
+- `--embed-brain`: leva o cérebro dentro do `.crom`, para quem ainda não o tem.
+- `--encrypt <senha>`: AES-256-GCM.
+- `--mode edge`: **com perda**. Guarda só as referências, e o restaurado não será igual ao original. Vídeo, binários e documentos ficam corrompidos.
 
 ---
 
@@ -82,8 +81,7 @@ crompressor pull --peer /ip4/IP/tcp/4001/p2p/ID -f projeto.crom -c cerebro.cromd
 crompressor unpack -i ./crom-data/projeto.crom -o projeto.tar -c cerebro.cromdb
 ```
 
-Sem `--codebook`, o `pack` comprime o arquivo sozinho e ele restaura sem cérebro.
-Com `--embed-brain`, o cérebro vai dentro do `.crom`, para quem ainda não o tem.
+Só recebe arquivos quem prova ter o mesmo cérebro, por desafio e resposta. O cérebro não é enviado pela rede: copie-o por um canal seu. Quem está atrás de NAT precisa de uma porta aberta, porque ainda não há relay.
 
 Veja os resultados em [Benchmarks](docs/benchmarks.md), que separam dados já vistos pelo cérebro de dados novos.
 
@@ -91,18 +89,27 @@ Veja os resultados em [Benchmarks](docs/benchmarks.md), que separam dados já vi
 
 ## Como funciona
 
-**A equação central:**
+1. O `train` guarda blocos do corpus no cérebro (por exemplo, 4 KB cada).
+2. O `pack` procura esses blocos em qualquer posição do arquivo, com hash rolante, então uma inserção não desalinha o resto.
+3. Um bloco idêntico vira só o ID dele. O resto é comprimido com zstd usando o cérebro como dicionário, o que também aproveita dados apenas parecidos.
+4. O `unpack` remonta o arquivo e confere o SHA-256. Se não bater, nenhum arquivo é gravado (exceto no modo edge ou com `--strict=false`).
 
-```
-CROM(X) = Σᵢ C[q(chunkᵢ(X))] ⊕ Δᵢ
-```
+Detalhes em [Arquitetura](docs/architecture.md).
 
-Onde:
-- `chunkᵢ(X)` — o i-ésimo bloco semântico do CDC
-- `q(·)` — quantização vetorial: entrada mais próxima no codebook
-- `C[·]` — lookup O(1) no codebook
-- `Δᵢ` — resíduo XOR (armazenado no Archive, descartado no Edge)
-- `⊕` — composição XOR
+---
+
+## Maturidade
+
+| Recurso | Situação |
+|---|---|
+| `train`, `pack`, `unpack`, `verify`, `info` | Testado |
+| `daemon`, `pull` | Testado entre máquinas, com NAT e DHT; ainda sem auditoria externa de segurança |
+| `mount` | Testado com FUSE |
+| `grep` | Parcial: só vê texto inteiro dentro de uma entrada do cérebro |
+| `cromfs` | Experimental: grava, mas a montagem não lista os arquivos |
+| `llm-vfs` | Demonstração com arquivos fictícios |
+
+Arquivos `.crom` novos não abrem em binários antigos, e nós de versões diferentes não sincronizam. Limites conhecidos em [Pendências](docs/PENDENCIAS.md).
 
 ---
 
@@ -113,7 +120,7 @@ crompressor/
 ├── cmd/crompressor/        ← CLI (pack, unpack, train, verify, info, grep, benchmark)
 ├── pkg/
 │   ├── cromlib/            ← Motor de compressão (Pack, Unpack, AutoPack)
-│   ├── format/             ← Serialização do formato .crom v8
+│   ├── format/             ← Serialização do formato .crom
 │   └── cromdb/             ← Leitura de codebooks
 ├── internal/               ← Implementação interna (chunker, codebook, delta, entropy, etc.)
 ├── examples/               ← Exemplos Go (edge_mode, archive_mode, codebook_train)
@@ -145,32 +152,17 @@ make demo       # Round-trip completo: gerar → comprimir → descomprimir → 
 
 | Documento | Descrição |
 |-----------|-----------|
-| [Arquitetura](docs/architecture.md) | CDC + VQ + XOR: decisões de design |
+| [Arquitetura](docs/architecture.md) | Como o motor funciona |
 | [Modos de Operação](docs/modes.md) | Edge vs Archive: quando usar cada um |
+| [Pendências](docs/PENDENCIAS.md) | O que ainda falta |
 | [Benchmarks](docs/benchmarks.md) | Metodologia e resultados |
 | [Pesquisa](docs/research/) | Links para estudo matemático |
 
 ---
 
-## Fundamentos Matemáticos
-
-O modelo de compressão, metodologia de benchmark e análise de rate-distortion estão em um repositório separado:
-
-→ [MrJc01/crompressor-matematica](https://github.com/MrJc01/crompressor-matematica)
-
----
-
 ## Ecossistema
 
-| Repositório | Papel |
-|-------------|-------|
-| [crompressor](https://github.com/MrJc01/crompressor) | Motor core (este repo) |
-| [crompressor-gui](https://github.com/MrJc01/crompressor-gui) | Interface gráfica nativa |
-| [crompressor-matematica](https://github.com/MrJc01/crompressor-matematica) | Estudo matemático e benchmarks |
-| [crompressor-neuronio](https://github.com/MrJc01/crompressor-neuronio) | Pesquisa neural |
-| [crompressor-security](https://github.com/MrJc01/crompressor-security) | Camada de segurança |
-| [crompressor-sinapse](https://github.com/MrJc01/crompressor-sinapse) | Transporte P2P |
-| [crompressor-video](https://github.com/MrJc01/crompressor-video) | Codec de vídeo |
+Os outros repositórios `crompressor-*` (como [gui](https://github.com/MrJc01/crompressor-gui), [matematica](https://github.com/MrJc01/crompressor-matematica) e [video](https://github.com/MrJc01/crompressor-video)) são experimentos e não foram testados com o formato atual.
 
 ---
 

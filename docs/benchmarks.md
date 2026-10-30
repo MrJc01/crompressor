@@ -48,7 +48,11 @@ Entre um PC atrás de NAT e um servidor público com a porta aberta, conexão di
 internet: arquivo de 5 MB com 4 bytes inseridos, 2.973 bytes pela rede em 1 s, com 12 ms de
 latência e SHA-256 igual.
 
-Não medido: arquivos de vários GB. Não há relay: quem está atrás de NAT
+Em localhost, com 1 GB aleatório e 4 bytes inseridos: 882.595 bytes pela rede e arquivo
+idêntico. Pico de memória de 356 MB no `pull` e cerca de 1,5 GB no `pack`, que levou
+cerca de 190 s por GB em 2 threads, com prioridade baixa.
+
+Não medido: acima de 1 GB. Não há relay: quem está atrás de NAT
 só recebe conexões com uma porta aberta.
 
 ## Como reproduzir

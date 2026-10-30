@@ -1,113 +1,50 @@
 # Arquitetura do Crompressor
 
-## Visão Geral
+## Ideia
 
-O Crompressor é um motor de compressão baseado em dicionário que combina três primitivas compostas:
+Os dois lados têm o mesmo cérebro (`.cromdb`). O `.crom` guarda o que monta o arquivo
+a partir dele, então o que o cérebro já conhece não precisa passar pela rede.
 
-```
-CROM(X) = Σᵢ C[q(chunkᵢ(X))] ⊕ Δᵢ
-```
-
-### 1. CDC — Content-Defined Chunking
-
-Utiliza Rabin Fingerprint para dividir a entrada em blocos semânticos de tamanho variável.
-Isso permite deduplicação entre arquivos estruturalmente similares, ao contrário de chunking fixo
-que é sensível a inserções/deleções.
-
-**Implementação:** `internal/chunker/` (fixo, CDC, FastCDC)
-
-### 2. VQ — Vector Quantization
-
-Mapeia cada chunk para a entrada mais próxima em um codebook pré-treinado:
+## Pipeline do `pack`
 
 ```
-q(x) = argmin_k ‖x - eₖ‖²
+Arquivo → blocos de 16 MB → corte em torno das entradas do cérebro
+        → entrada idêntica: só o ID   | resto: literal
+        → literais em zstd, com o cérebro como dicionário
+        → tabela de chunks em colunas + blocos comprimidos
 ```
 
-O lookup é O(1) após o treinamento via LSH (Locality-Sensitive Hashing) com B-Tree indexada.
+- **Corte (`internal/search/aligned.go`):** com entradas de 1 KB ou mais, um hash rolante
+  acha as entradas em qualquer posição. Entradas menores usam blocos fixos e, opcionalmente,
+  `--cdc` (FastCDC) ou casamento aproximado com resíduo XOR.
+- **Busca exata (`internal/search/lsh.go`):** O(1), por hash da entrada inteira. A busca
+  aproximada só compara entradas com os mesmos 2 primeiros bytes: não é um LSH de verdade.
+- **Dicionário (`internal/delta`):** usa até 32 MB finais do cérebro.
+  `--max-compression` usa o encoder em C, nível 19; os frames continuam legíveis em Go puro.
 
-**Implementação:** `internal/search/` (LSH, Linear, Multi-strategy)
+## Cérebro (`.cromdb`)
 
-### 3. XOR Delta
+Entradas de tamanho fixo, as mais frequentes do corpus, numeradas na ordem em que aparecem
+nos dados. Essa ordem deixa os IDs sequenciais e a tabela quase sem custo. Não há K-Means:
+é contagem de frequência. O `train` guarda em memória cada bloco único, então o corpus precisa
+caber na RAM.
 
-Armazena o resíduo entre o chunk original e o padrão reconstruído do codebook:
+## Formato `.crom`
 
-```
-Δᵢ = original XOR reconstructed
-```
+| Seção | Conteúdo |
+|---|---|
+| Header | Versão, SHA-256 do original, tamanho, flags, Merkle, cérebro embutido opcional |
+| Tabela de blocos | Tamanho comprimido de cada bloco (cada um tem 16 MB do original) |
+| Tabela de chunks | `[tamanho][zstd]`, em colunas e com diferenças, cifrada com `--encrypt` |
+| Blocos | Resíduos e literais em zstd, cifrados com `--encrypt` |
 
-- **Modo Edge:** `Δᵢ` é descartado → compressão lossy
-- **Modo Archive:** `Δᵢ` é armazenado → compressão lossless
+Se o resultado ficasse maior que o original, o arquivo é gravado inteiro (passthrough).
 
-**Implementação:** `internal/delta/` (XOR, Diff, Patch)
+## Sincronização
 
----
+1. **Autenticação:** cada lado prova ter o cérebro com HMAC sobre um desafio, sem revelar o hash.
+2. **Manifesto:** o receptor recebe a lista de blocos e compara com a versão local.
+3. **Diferença:** só os blocos que faltam passam, comprimidos com o cérebro como dicionário.
+4. **Reconstrução:** o `.crom` é refeito e o `unpack` confere o SHA-256.
 
-## Pipeline de Compressão
-
-```
-Input File
-    │
-    ▼
-┌─────────────┐
-│ Entropy     │ ← Análise de Shannon (64KB amostra)
-│ Analysis    │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│ Chunking    │ ← CDC (Rabin) ou Fixed-size
-│             │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│ Codebook    │ ← LSH lookup O(1) → índice do padrão mais similar
-│ Matching    │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│ Delta       │ ← XOR(chunk, pattern) → resíduo
-│ Encoding    │   Edge: descarta | Archive: armazena
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│ Format      │ ← Serialização .crom v8
-│ Writer      │   Header + Chunk Table + Delta Blob
-└─────────────┘
-```
-
----
-
-## Formato do Arquivo .crom (v8)
-
-| Seção | Tamanho | Descrição |
-|-------|---------|-----------|
-| Magic | 4 bytes | `CROM` |
-| Version | 1 byte | `0x08` |
-| Header | 136 bytes | Metadata, SHA-256 original, flags |
-| Chunk Table | variável | Índices do codebook + delta sizes |
-| Delta Blob | variável | Resíduos XOR concatenados |
-
-**Implementação:** `pkg/format/` (reader, writer, format)
-
----
-
-## Codebook (.cromdb)
-
-O codebook é um dicionário treinado por K-Means sobre o corpus de dados-alvo.
-Cada entrada (codeword) é um vetor de bytes representando um padrão frequente.
-
-- **Treinamento:** `internal/trainer/` (extração de frequência, seleção elite, BPE)
-- **Serialização:** `internal/codebook/` (leitura, mmap, lookup)
-- **Tamanho típico:** 256 a 16384 entradas
-
----
-
-## Referências
-
-- [Estudo Matemático Completo](https://github.com/MrJc01/crompressor-matematica)
-- [Edge vs Archive: quando usar cada modo](modes.md)
-- [Benchmarks e metodologia](benchmarks.md)
+O tráfego é cifrado pelo libp2p. A descoberta usa `--peer`, mDNS na rede local, ou DHT.
