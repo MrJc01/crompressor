@@ -4,6 +4,7 @@ go 1.25.7
 
 require (
 	bazil.org/fuse v0.0.0-20230120002735-62a210ff1fd5
+	github.com/DataDog/zstd v1.5.7
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/hanwen/go-fuse/v2 v2.9.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7

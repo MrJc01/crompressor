@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/MrJc01/crompressor/internal/delta"
 	"github.com/MrJc01/crompressor/internal/trainer"
 )
 
@@ -296,6 +297,31 @@ func TestPackStreamWithSharedBrain(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(out); !bytes.Equal(got, shifted) {
 		t.Fatal("restored file differs without a brain")
+	}
+}
+
+func TestMaxCompressionRestoresWithGoDecoder(t *testing.T) {
+	if !delta.MaxCompressionAvailable {
+		t.Skip("build without CGO")
+	}
+	dir := t.TempDir()
+	base := bytes.Repeat([]byte("2026-10-30 INFO api GET /v1/items 200\n"), 4000)
+	brain := trainBrain(t, dir, base)
+	data := append(bytes.Repeat([]byte("2026-10-31 WARN api GET /v1/users 404\n"), 4000), base[:9000]...)
+	in := filepath.Join(dir, "in.txt")
+	os.WriteFile(in, data, 0644)
+	opts := DefaultPackOptions()
+	opts.MaxCompression = true
+	packed := filepath.Join(dir, "in.crom")
+	if _, err := Pack(in, packed, brain, opts); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "out.txt")
+	if err := Unpack(packed, out, brain, DefaultUnpackOptions()); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(out); !bytes.Equal(got, data) {
+		t.Fatal("restored file differs")
 	}
 }
 

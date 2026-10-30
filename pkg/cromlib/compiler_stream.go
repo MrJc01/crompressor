@@ -214,7 +214,11 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 			allEntries = append(allEntries, blockEntries...)
 
 			// Compress block and write to temp
-			compBlock, err := delta.CompressPoolDict(blockDeltas, brainDict)
+			compress := delta.CompressPoolDict
+			if opts.MaxCompression {
+				compress = delta.CompressPoolMax
+			}
+			compBlock, err := compress(blockDeltas, brainDict)
 			if err != nil {
 				return nil, fmt.Errorf("stream: compress block: %w", err)
 			}

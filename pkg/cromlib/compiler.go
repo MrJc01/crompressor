@@ -39,6 +39,7 @@ type PackOptions struct {
 	UseACAC       bool   // If true, overrides CDC and uses Advanced Content-Aware Chunking
 	ACACDelimiter byte   // Delimiter char for ACAC (e.g. '\n' or ',')
 	MultiPass     bool   // If true, restricts codebook usage to Top-256 patterns via two-pass
+	MaxCompression bool  // If true, compresses blocks at zstd level 19: much slower, smaller output
 	EmbedBrain    bool   // If true, stores the codebook inside the .crom, which then restores on its own (V8)
 	// Callback for progress bar integration, called with bytes processed
 	OnProgress func(bytesProcessed int)
@@ -93,7 +94,8 @@ const minNearMatchSimilarity = 0.90
 
 // Pack reads an input file iteratively, searches the spatial index in parallel,
 // and streams compressed/encrypted deltas to disk in block frames without blowing up RAM.
-func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metrics, error) {
+// The output only appears at outputPath once it is complete.
+func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (m *Metrics, err error) {
 	start := time.Now()
 
 	opts.OnProgress(0)
@@ -171,11 +173,19 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 	// The REAL chunk count will be set after the processing loop.
 	numEstimatedChunks := uint32((originalSize + uint64(opts.ChunkSize) - 1) / uint64(opts.ChunkSize))
 
-	outFile, err := os.Create(outputPath)
+	tmpPath := outputPath + ".tmp"
+	outFile, err := os.Create(tmpPath)
 	if err != nil {
 		return nil, err
 	}
-	defer outFile.Close()
+	defer func() {
+		outFile.Close()
+		if err != nil {
+			os.Remove(tmpPath)
+			return
+		}
+		err = os.Rename(tmpPath, outputPath)
+	}()
 
 	// 2. Setup Header
 	header := &format.Header{
@@ -616,7 +626,11 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 			}
 
 			// Compress this independent block
-			compBlock, err := delta.CompressPoolDict(blockPlainDeltas, brainDict)
+			compress := delta.CompressPoolDict
+			if opts.MaxCompression {
+				compress = delta.CompressPoolMax
+			}
+			compBlock, err := compress(blockPlainDeltas, brainDict)
 			if err != nil {
 				return nil, fmt.Errorf("pack: compress block: %w", err)
 			}

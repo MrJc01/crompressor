@@ -71,7 +71,8 @@ func brainEncoderOptions(dict []byte) []zstd.EOption {
 func brainDecoderOptions(dict []byte) []zstd.DOption {
 	opts := []zstd.DOption{zstd.WithDecoderConcurrency(1)}
 	if len(dict) > 0 {
-		opts = append(opts, zstd.WithDecoderDictRaw(brainDictID, dict))
+		// The C encoder writes frames without a dictionary ID.
+		opts = append(opts, zstd.WithDecoderDictRaw(brainDictID, dict), zstd.WithDecoderDictRaw(0, dict))
 	}
 	return opts
 }
