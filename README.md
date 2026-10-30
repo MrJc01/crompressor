@@ -80,6 +80,9 @@ crompressor pull --peer /ip4/IP/tcp/4001/p2p/ID -f projeto.crom -c cerebro.cromd
 crompressor unpack -i ./crom-data/projeto.crom -o projeto.tar -c cerebro.cromdb
 ```
 
+Sem `--codebook`, o `pack` comprime o arquivo sozinho e ele restaura sem cérebro.
+Com `--embed-brain`, o cérebro vai dentro do `.crom`, para quem ainda não o tem.
+
 Veja os resultados em [Benchmarks](docs/benchmarks.md), que separam dados já vistos pelo cérebro de dados novos.
 
 ---

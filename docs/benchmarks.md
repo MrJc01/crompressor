@@ -36,6 +36,9 @@ aleatórios, 4 bytes inseridos no meio, receptor com a versão antiga. Passaram 
 bytes pela rede e o SHA-256 da restauração bateu. Quase tudo é o manifesto (21 bytes
 por bloco), que ainda não é comprimido.
 
+O mesmo resultado se repetiu pelo IP da rede local da máquina, ainda entre dois
+processos no mesmo computador. Entre máquinas diferentes e por DHT não foi medido.
+
 ## Como reproduzir
 
 ```bash
