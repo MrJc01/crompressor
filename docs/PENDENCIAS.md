@@ -27,6 +27,13 @@ Comprimir horas de vídeo com codebook treinado, deduplicação e montadores do 
   só o hash do bloco mais próximo, sem resíduo: é com perda, e o cérebro é um `.gob` em RAM.
   `crom-crompressor-ar` é um cofre por arquivo inteiro, útil para cópias e como interface.
 
+- O `crompressor` é a origem: o motor fica aqui, e os outros repositórios testam em cima dele.
+- Trecho parecido = hash + diferença que o transforma. Em MP4 os bytes não ficam parecidos; em
+  quadros decodificados, sim, mas o ruído de câmera impede a diferença de zerar. A busca atual só
+  compara blocos com os mesmos 2 primeiros bytes e precisa melhorar para achar blocos parecidos.
+
+- [ ] Testar hash + diferença nos repositórios (`crompressor-video`, `crom-crompressor-ar`),
+      usando o motor do `crompressor`, e medir o custo da diferença em vídeo com ruído.
 - [ ] Primeiro teste barato: em 1 a 2 horas de vídeo real repetitivo, medir quantos blocos de
       imagem se repetem e comparar com o mesmo vídeo em AV1 (tamanho e qualidade, com VMAF ou SSIM).
 - [ ] Só se compensar: criar o pipeline quadros → motor → montador, com resíduo para a qualidade.
