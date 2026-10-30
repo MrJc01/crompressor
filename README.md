@@ -14,7 +14,8 @@ O Crompressor é um motor de compressão construído sobre três primitivas comp
 
 - **Blocos** — A entrada é cortada em torno das entradas do cérebro, encontradas em qualquer posição por hash rolante, de modo que uma inserção não desalinha o resto do arquivo. `--cdc` ativa FastCDC, mas o cérebro é treinado com blocos fixos.
 - **Codebook** — Um bloco idêntico a uma entrada do cérebro vira só o ID dela (busca O(1) por hash). Um bloco quase igual usa a entrada mais próxima no mesmo balde, definido pelos 2 primeiros bytes.
-- **XOR Delta** — Armazena o resíduo `Δᵢ = original XOR reconstruído` para reconstrução lossless quando necessário.
+- **Dicionário** — O que não é idêntico é comprimido com zstd usando o cérebro como dicionário.
+- **XOR Delta** — Com entradas pequenas (abaixo de 1 KB), armazena o resíduo `Δᵢ = original XOR reconstruído` para reconstrução lossless quando necessário.
 
 O motor opera em dois modos distintos:
 
@@ -77,6 +78,7 @@ crompressor daemon -c cerebro.cromdb -d ./crom-data
 
 # Quem recebe (o endereço aparece na saída do daemon)
 crompressor pull --peer /ip4/IP/tcp/4001/p2p/ID -f projeto.crom -c cerebro.cromdb -d ./crom-data
+# Ou, sem saber o endereço: --bootstrap <endereço de um nó> --private-dht (também no daemon)
 crompressor unpack -i ./crom-data/projeto.crom -o projeto.tar -c cerebro.cromdb
 ```
 
