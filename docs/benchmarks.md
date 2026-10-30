@@ -49,11 +49,28 @@ internet: arquivo de 5 MB com 4 bytes inseridos, 2.973 bytes pela rede em 1 s, c
 latência e SHA-256 igual.
 
 Em localhost, com 1 GB aleatório e 4 bytes inseridos: 882.595 bytes pela rede e arquivo
-idêntico. Pico de memória de 356 MB no `pull` e cerca de 1,5 GB no `pack`, que levou
-cerca de 190 s por GB em 2 threads, com prioridade baixa.
+idêntico. Pico de memória de 356 MB no `pull` e cerca de 1,3 GB no `pack`, que levou 12 s.
 
-Não medido: acima de 1 GB. Não há relay: quem está atrás de NAT
+Não medido: sincronização acima de 1 GB. Não há relay: quem está atrás de NAT
 só recebe conexões com uma porta aberta.
+
+## Cérebro compartilhado entre projetos
+
+`node_modules` reais de 5 projetos (1,38 GB em `tar`) treinaram um único cérebro, com 1,31 GB
+e blocos de 4 KB. O treino levou 74 s, com pico de 1,4 GB de memória.
+
+| Caso | Original | `.crom` | Redução | Tempo do `pack` |
+|---|---|---|---|---|
+| Projeto já visto (`crom-tv`) | 333,6 MB | 0,21 MB | 99,94% | 60 s |
+| Os 5 projetos juntos | 1.378,7 MB | 0,85 MB | 99,94% | 31 s |
+| Projeto novo, padrão | 500,7 MB | 80,5 MB | 83,92% | 169 s |
+| Projeto novo, blocos de 1 KB | 500,7 MB | 78,9 MB | 84,23% | 149 s |
+| Projeto novo, `--max-compression` | 500,7 MB | 72,0 MB | 85,61% | 1.346 s |
+| Projeto novo, `zstd -19` sem cérebro | 500,7 MB | 75,4 MB | 84,95% | não medido |
+
+Dividir um cérebro **não** ajudou muito um projeto que ele nunca viu, mesmo com pacotes em
+comum: o resultado fica perto do zstd puro. O ganho grande vem de quem transfere dados que o
+cérebro já contém. Com `--max-compression`, o custo de tempo é alto em volumes grandes.
 
 ## Como reproduzir
 

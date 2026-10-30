@@ -26,8 +26,8 @@ Arquivo → blocos de 16 MB → corte em torno das entradas do cérebro
 
 Entradas de tamanho fixo, as mais frequentes do corpus, numeradas na ordem em que aparecem
 nos dados. Essa ordem deixa os IDs sequenciais e a tabela quase sem custo. Não há K-Means:
-é contagem de frequência. O `train` guarda em memória cada bloco único, então o corpus precisa
-caber na RAM.
+é contagem de frequência. O `train` conta os blocos pelo hash e relê o corpus para copiar só os
+escolhidos, então o cérebro final (`-s` × `-k`) precisa caber na RAM, e não o corpus inteiro.
 
 ## Formato `.crom`
 

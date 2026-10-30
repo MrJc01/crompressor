@@ -21,6 +21,8 @@ Serve para coleções e versões de dados parecidos. **Não** substitui o zstd p
 | 1 GB aleatório com 4 bytes inseridos | 1.000 MB | 0,88 MB | 99,91% |
 | Logs novos do mesmo formato | 7,14 MB | 1,19 MB | 83,33% |
 
+Um mesmo cérebro serve a vários projetos que ele já viu (1,38 GB de `node_modules` passaram como 0,85 MB). Em um projeto que ele nunca viu, o resultado fica perto do zstd puro (cerca de 85%).
+
 Veja todos os números e como reproduzi-los em [Benchmarks](docs/benchmarks.md).
 
 ---

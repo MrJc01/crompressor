@@ -8,9 +8,10 @@
 
 ## Prioridade alta
 
-- [ ] Medir um cérebro compartilhado por vários projetos e usuários.
-- [ ] Testar com vários GB. O `train` guarda em memória cada bloco único do corpus.
-- [ ] Deixar o `pack` mais rápido (cerca de 190 s por GB com o cérebro como dicionário).
+- [ ] Melhorar dados novos: um cérebro entre projetos fica perto do zstd puro em projetos que
+      não viu. Investigar arquivos menores que o bloco e o dicionário limitado a 32 MB.
+- [ ] Testar acima de 1,4 GB, com o cérebro final grande (ele precisa caber na RAM).
+- [ ] Acelerar literais: 500 MB de dados novos levam quase 3 min, e `--max-compression`, 22 min.
 
 ## Prioridade média
 
