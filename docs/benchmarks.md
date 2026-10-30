@@ -44,7 +44,11 @@ em todos os casos que completaram. Nos contêineres, cada nó tinha 80 ms de atr
 | DHT privada entre contêineres, sem mDNS (sem atraso nem perda) | 17.083 bytes |
 | DHT pública pela internet, dois processos na mesma máquina | 28.059 bytes, achou o peer em 95 s |
 
-Não medido: máquinas fisicamente em redes diferentes. Não há relay: quem está atrás de NAT
+Entre um PC atrás de NAT e um servidor público com a porta aberta, conexão direta pela
+internet: arquivo de 5 MB com 4 bytes inseridos, 2.973 bytes pela rede em 1 s, com 12 ms de
+latência e SHA-256 igual.
+
+Não medido: arquivos de vários GB. Não há relay: quem está atrás de NAT
 só recebe conexões com uma porta aberta.
 
 ## Como reproduzir
