@@ -9,11 +9,17 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cgo: ['0', '1']
+    env:
+      CGO_ENABLED: ${{ matrix.cgo }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '1.25'
 
@@ -21,7 +27,7 @@ jobs:
         run: go build ./...
 
       - name: Test
-        run: go test ./... -short -count=1 -timeout 120s
+        run: go test ./... -count=1 -timeout 600s
 
       - name: Vet
         run: go vet ./...
