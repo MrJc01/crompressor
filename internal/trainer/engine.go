@@ -10,6 +10,7 @@ import (
 
 	"github.com/MrJc01/crompressor/internal/chunker"
 	"github.com/MrJc01/crompressor/internal/codebook"
+	"github.com/MrJc01/crompressor/internal/search"
 )
 
 // TrainOptions configures the training process.
@@ -73,6 +74,11 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 	}
 	if opts.ChunkSize <= 0 {
 		opts.ChunkSize = chunker.DefaultChunkSize
+	}
+
+	// Large codewords are matched whole, by hash: limiting buckets would only discard them.
+	if opts.ChunkSize >= search.AlignedMinCodewordSize {
+		opts.MaxPerBucket = 0
 	}
 
 	// Phase 1: Discover all files
