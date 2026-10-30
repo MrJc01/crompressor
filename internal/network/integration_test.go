@@ -27,6 +27,66 @@ func TestTwoNodeSync(t *testing.T) {
 	t.Run("encrypted", func(t *testing.T) { runTwoNodeSync(t, "segredo") })
 }
 
+// A node without the brain must not get any file, even knowing its name.
+func TestUnauthenticatedPeerGetsNothing(t *testing.T) {
+	t.Setenv("CROM_TEST_DISABLE_MDNS", "1")
+	brain := func(seed int64) string {
+		data := make([]byte, 64*1024)
+		rand.New(rand.NewSource(seed)).Read(data)
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "d.bin"), data, 0644); err != nil {
+			t.Fatal(err)
+		}
+		opts := trainer.DefaultTrainOptions()
+		opts.InputDir = dir
+		opts.OutputPath = filepath.Join(t.TempDir(), "b.cromdb")
+		opts.ChunkSize = 4096
+		if _, err := trainer.Train(opts); err != nil {
+			t.Fatal(err)
+		}
+		return opts.OutputPath
+	}
+	brainA, brainB := brain(1), brain(2)
+
+	dirA := t.TempDir()
+	src := filepath.Join(dirA, "secret.bin")
+	secret := make([]byte, 64*1024)
+	if err := os.WriteFile(src, secret, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cromlib.Pack(src, filepath.Join(dirA, "secret.bin.crom"), brainA, cromlib.DefaultPackOptions()); err != nil {
+		t.Fatal(err)
+	}
+
+	nodeA, err := NewCromNode(brainA, 0, dirA, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nodeA.Stop()
+	NewSyncProtocol(nodeA)
+	nodeB, err := NewCromNode(brainB, 0, t.TempDir(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nodeB.Stop()
+	syncB := NewSyncProtocol(nodeB)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := nodeB.Host.Connect(ctx, peer.AddrInfo{ID: nodeA.PeerID(), Addrs: nodeA.Host.Addrs()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncB.RequestSync(ctx, nodeA.PeerID(), "secret.bin.crom"); err == nil {
+		t.Fatal("sync without authentication should fail")
+	}
+	if err := nodeB.AuthenticatePeer(ctx, nodeA.PeerID()); err == nil {
+		t.Fatal("authentication with a different brain should fail")
+	}
+	if nodeA.IsAuthenticated(nodeB.PeerID()) {
+		t.Fatal("a peer with a different brain must not be authenticated")
+	}
+}
+
 func runTwoNodeSync(t *testing.T, key string) {
 	t.Setenv("CROM_TEST_DISABLE_MDNS", "1")
 

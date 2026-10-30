@@ -3,7 +3,6 @@
 package network
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -15,7 +14,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/MrJc01/crompressor/internal/codebook"
 	"github.com/MrJc01/crompressor/internal/delta"
 	cromsync "github.com/MrJc01/crompressor/pkg/sync"
 )
@@ -31,11 +29,14 @@ const (
 	MsgManifest     byte = 0x02 // The serialized ChunkManifest
 	MsgDiffReq      byte = 0x03 // Request missing chunks (payload is array of indices)
 	MsgChunkData    byte = 0x04 // Raw delta payload
-	MsgCodebookHash byte = 0x05 // 32-byte SHA-256 BuildHash of the codebook
-	MsgCodebookReq  byte = 0x06 // Request the full .cromdb binary
-	MsgCodebookData byte = 0x07 // Response: full .cromdb binary
 	MsgError        byte = 0xFF // Error message
 )
+
+// maxRequestSize bounds what a peer can make this node allocate with one request.
+const maxRequestSize = 64 * 1024 * 1024
+
+// maxManifestSize bounds a decompressed manifest: about 50 million chunks.
+const maxManifestSize = 1024 * 1024 * 1024
 
 // SyncProtocol handles manifest exchange and chunk transfers.
 type SyncProtocol struct {
@@ -55,6 +56,12 @@ func NewSyncProtocol(node *CromNode) *SyncProtocol {
 func (p *SyncProtocol) handleStream(s network.Stream) {
 	defer s.Close()
 
+	if !p.node.IsAuthenticated(s.Conn().RemotePeer()) {
+		fmt.Printf("[Sync] ❌ Peer %s não autenticado: pedido recusado.\n", s.Conn().RemotePeer())
+		sendError(s, "Autenticacao necessaria")
+		return
+	}
+
 	for {
 		// Read msg type
 		msgType := make([]byte, 1)
@@ -71,6 +78,10 @@ func (p *SyncProtocol) handleStream(s network.Stream) {
 			return
 		}
 		payloadLen := binary.LittleEndian.Uint32(lenBuf)
+		if payloadLen > maxRequestSize {
+			fmt.Printf("[Sync] ❌ Peer %s enviou pedido de %d bytes: recusado.\n", s.Conn().RemotePeer(), payloadLen)
+			return
+		}
 
 		// Read payload
 		payload := make([]byte, payloadLen)
@@ -87,14 +98,6 @@ func (p *SyncProtocol) handleStream(s network.Stream) {
 		case MsgDiffReq:
 			fmt.Printf("[Sync] Peer %s solicitou chunks do arquivo\n", s.Conn().RemotePeer())
 			p.handleDiffReq(s, payload)
-
-		case MsgCodebookHash:
-			fmt.Printf("[Sync] Peer %s enviou hash do codebook\n", s.Conn().RemotePeer())
-			p.handleCodebookHash(s, payload)
-
-		case MsgCodebookReq:
-			fmt.Printf("[Sync] Peer %s requisitou codebook binário\n", s.Conn().RemotePeer())
-			p.handleCodebookReq(s)
 
 		default:
 			fmt.Printf("[Sync] Mensagem desconhecida de %s: 0x%02x\n", s.Conn().RemotePeer(), msgType[0])
@@ -184,61 +187,12 @@ func (p *SyncProtocol) handleDiffReq(s network.Stream, payload []byte) {
 // 4. Send DIFF_REQ with missing indices
 // 5. Receive CHUNK_DATA stream and rebuild
 func (p *SyncProtocol) RequestSync(ctx context.Context, pid peer.ID, filename string) error {
+	filename = filepath.Base(filename)
 	s, err := p.node.Host.NewStream(ctx, pid, SyncProtocolID)
 	if err != nil {
 		return fmt.Errorf("sync: open stream: %w", err)
 	}
 	defer s.Close()
-
-	// 0. Codebook Handshake
-	if err := sendMsg(s, MsgCodebookHash, p.node.CodebookHash[:]); err != nil {
-		return fmt.Errorf("sync: enviar codebook hash: %w", err)
-	}
-
-	hashResp, hashPayload, err := readMsg(s)
-	if err != nil {
-		return fmt.Errorf("sync: ler resposta codebook hash: %w", err)
-	}
-
-	if hashResp == MsgError {
-		return fmt.Errorf("sync: codebook handshake error: %s", string(hashPayload))
-	}
-
-	if hashResp == MsgCodebookHash {
-		var remoteHash [32]byte
-		copy(remoteHash[:], hashPayload)
-
-		if !bytes.Equal(remoteHash[:], p.node.CodebookHash[:]) {
-			fmt.Printf("[Sync] Codebook mismatch! Solicitando .cromdb do peer...\n")
-			if err := sendMsg(s, MsgCodebookReq, nil); err != nil {
-				return fmt.Errorf("sync: request codebook: %w", err)
-			}
-
-			cbResp, cbPayload, err := readMsg(s)
-			if err != nil {
-				return fmt.Errorf("sync: ler codebook data: %w", err)
-			}
-			if cbResp != MsgCodebookData {
-				return fmt.Errorf("sync: esperava CODEBOOK_DATA (0x07), recebeu 0x%02x", cbResp)
-			}
-
-			remoteCbPath := filepath.Join(p.node.DataDir, "remote_peer.cromdb")
-			if err := os.WriteFile(remoteCbPath, cbPayload, 0644); err != nil {
-				return fmt.Errorf("sync: salvar codebook remoto: %w", err)
-			}
-
-			// Update node to use the remote codebook for this sync
-			p.node.CodebookPath = remoteCbPath
-			newCb, err := codebook.Open(remoteCbPath)
-			if err == nil {
-				p.node.CodebookHash = newCb.BuildHash()
-				newCb.Close()
-			}
-			fmt.Printf("[Sync] ✔ Codebook remoto salvo em %s\n", remoteCbPath)
-		} else {
-			fmt.Printf("[Sync] ✔ Codebooks idênticos. Prosseguindo com sync.\n")
-		}
-	}
 
 	// 1. Send Request
 	if err := sendMsg(s, MsgSyncReq, []byte(filename)); err != nil {
@@ -259,7 +213,7 @@ func (p *SyncProtocol) RequestSync(ctx context.Context, pid peer.ID, filename st
 		return fmt.Errorf("esperava MANIFEST (0x02), recebeu 0x%02x", msgType)
 	}
 
-	manifestBin, err := delta.DecompressPool(payload)
+	manifestBin, err := delta.DecompressPoolLimit(payload, maxManifestSize)
 	if err != nil {
 		return fmt.Errorf("sync: decompress remote manifest: %w", err)
 	}
@@ -354,25 +308,6 @@ func (p *SyncProtocol) RequestSync(ctx context.Context, pid peer.ID, filename st
 
 	fmt.Printf("[Sync] ✔ Sincronismo Delta P2P de '%s' finalizado com sucesso.\n", filename)
 	return nil
-}
-
-// --- Codebook Sharing Handlers ---
-
-// handleCodebookHash responds with our own codebook hash for comparison.
-func (p *SyncProtocol) handleCodebookHash(s network.Stream, payload []byte) {
-	// Reply with our own hash so the requester can compare
-	sendMsg(s, MsgCodebookHash, p.node.CodebookHash[:])
-}
-
-// handleCodebookReq sends the full .cromdb binary to the requesting peer.
-func (p *SyncProtocol) handleCodebookReq(s network.Stream) {
-	data, err := os.ReadFile(p.node.CodebookPath)
-	if err != nil {
-		sendError(s, "Erro ao ler codebook: "+err.Error())
-		return
-	}
-	fmt.Printf("[Sync] Enviando codebook binário (%d bytes)\n", len(data))
-	sendMsg(s, MsgCodebookData, data)
 }
 
 // --- Wire Format Helpers ---

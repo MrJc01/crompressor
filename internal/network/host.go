@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -35,6 +36,7 @@ type CromNode struct {
 	DataDir      string   // Directory containing local .crom files
 	EncKey       string   // AES passphrase for encrypted files
 	CodebookPath string   // Path to the .cromdb file
+	authenticated sync.Map // peer.ID of peers that proved they hold the same brain
 
 	ctx    context.Context
 	cancel context.CancelFunc

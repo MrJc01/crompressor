@@ -122,6 +122,9 @@ func StreamChunks(localPath, codebookPath, encryptionKey string, indices []uint3
 	return zw.Close()
 }
 
+// maxPatchOverhead is the largest micro-patch the compiler writes for a chunk.
+const maxPatchOverhead = 256
+
 type countingReader struct {
 	r io.Reader
 	n int64
@@ -164,6 +167,11 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 
 		idx := binary.LittleEndian.Uint32(header[0:4])
 		size := binary.LittleEndian.Uint32(header[4:8])
+
+		// The peer is not trusted to size allocations: a residual never exceeds its chunk.
+		if idx >= manifest.ChunkCount || size > manifest.Entries[idx].ChunkSize+maxPatchOverhead {
+			return received, fmt.Errorf("bitswap: invalid chunk %d with %d bytes", idx, size)
+		}
 
 		residual := make([]byte, size)
 		if size > 0 {

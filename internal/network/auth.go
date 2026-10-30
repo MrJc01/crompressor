@@ -3,9 +3,13 @@
 package network
 
 import (
-	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -17,49 +21,74 @@ import (
 
 const (
 	// AuthProtocol is the protocol ID for the sovereignty handshake.
-	AuthProtocol = "/crom/auth/1.0"
+	AuthProtocol = "/crom/auth/2.0"
 	
 	// AuthTimeout is the maximum time allowed for the handshake.
 	AuthTimeout = 10 * time.Second
+
+	authNonceSize = 32
 )
 
-// setupSovereigntyAuth configures the host to require a Codebook BuildHash match
-// for any incoming or outgoing connection to be considered trusted.
+var errBrainMismatch = errors.New("Codebook diferente (Sovereignty violation)")
+
+// setupSovereigntyAuth configures the host to require proof of holding the same
+// brain before any file is served.
 func (n *CromNode) setupSovereigntyAuth() {
-	// Set the stream handler for incoming auth handshakes
 	n.Host.SetStreamHandler(AuthProtocol, n.authHandler)
 }
 
-// authHandler processes incoming handshake streams.
-// It receives the remote node's CodebookHash and sends its own.
-// If they don't match, the connection is instantly closed.
-func (n *CromNode) authHandler(s network.Stream) {
-	defer s.Close()
+// authProof proves knowledge of the brain without revealing its hash. It is bound to
+// the sender's identity and the other side's nonce, so it cannot be replayed or reflected.
+func (n *CromNode) authProof(sender peer.ID, nonce []byte) []byte {
+	mac := hmac.New(sha256.New, n.CodebookHash[:])
+	mac.Write([]byte("crom-auth-v2"))
+	mac.Write([]byte(sender))
+	mac.Write(nonce)
+	return mac.Sum(nil)
+}
 
-	// Set deadline for the handshake
+// handshake runs the same mutual challenge on both ends of the stream.
+func (n *CromNode) handshake(s network.Stream) error {
 	s.SetDeadline(time.Now().Add(AuthTimeout))
 
-	// 1. Send our CodebookHash
-	if _, err := s.Write(n.CodebookHash[:]); err != nil {
-		fmt.Printf("[Auth] Failed to send CodebookHash to %s: %v\n", s.Conn().RemotePeer(), err)
+	ourNonce := make([]byte, authNonceSize)
+	if _, err := rand.Read(ourNonce); err != nil {
+		return err
+	}
+	if _, err := s.Write(ourNonce); err != nil {
+		return fmt.Errorf("send nonce: %w", err)
+	}
+	remoteNonce := make([]byte, authNonceSize)
+	if _, err := io.ReadFull(s, remoteNonce); err != nil {
+		return fmt.Errorf("read nonce: %w", err)
+	}
+	if _, err := s.Write(n.authProof(n.Host.ID(), remoteNonce)); err != nil {
+		return fmt.Errorf("send proof: %w", err)
+	}
+	remoteProof := make([]byte, sha256.Size)
+	if _, err := io.ReadFull(s, remoteProof); err != nil {
+		return fmt.Errorf("read proof: %w", err)
+	}
+	remote := s.Conn().RemotePeer()
+	if !hmac.Equal(remoteProof, n.authProof(remote, ourNonce)) {
+		return errBrainMismatch
+	}
+	n.authenticated.Store(remote, true)
+	return nil
+}
+
+// authHandler processes incoming handshake streams.
+func (n *CromNode) authHandler(s network.Stream) {
+	defer s.Close()
+	remote := s.Conn().RemotePeer()
+	if err := n.handshake(s); err != nil {
+		fmt.Printf("[Auth] ❌ Peer %s rejeitado: %v\n", remote, err)
+		if errors.Is(err, errBrainMismatch) {
+			s.Conn().Close()
+		}
 		return
 	}
-
-	// 2. Receive remote CodebookHash
-	remoteHash := make([]byte, 32)
-	if _, err := s.Read(remoteHash); err != nil {
-		fmt.Printf("[Auth] Failed to read CodebookHash from %s: %v\n", s.Conn().RemotePeer(), err)
-		return
-	}
-
-	// 3. Verify Sovereignty
-	if !bytes.Equal(n.CodebookHash[:], remoteHash) {
-		fmt.Printf("[Auth] ❌ SOBERANIA REJEITADA: Peer %s possui Codebook diferente.\n", s.Conn().RemotePeer())
-		s.Conn().Close() // Terminate the connection entirely
-		return
-	}
-
-	fmt.Printf("[Auth] ✔ Peer %s autenticado no mesmo Codebook.\n", s.Conn().RemotePeer())
+	fmt.Printf("[Auth] ✔ Peer %s autenticado no mesmo Codebook.\n", remote)
 }
 
 // AuthenticatePeer initiates the handshake with a remote peer.
@@ -69,28 +98,21 @@ func (n *CromNode) AuthenticatePeer(ctx context.Context, pid peer.ID) error {
 	if err != nil {
 		return fmt.Errorf("auth: failed to open stream: %w", err)
 	}
-	defer s.Close() // Will close write side, wait for response, then full close
+	defer s.Close()
 
-	s.SetDeadline(time.Now().Add(AuthTimeout))
-
-	// 1. Send our CodebookHash
-	if _, err := s.Write(n.CodebookHash[:]); err != nil {
-		return fmt.Errorf("auth: failed to send hash: %w", err)
+	if err := n.handshake(s); err != nil {
+		if errors.Is(err, errBrainMismatch) {
+			n.Host.Network().ClosePeer(pid)
+		}
+		return fmt.Errorf("auth: %w", err)
 	}
-
-	// 2. Receive remote CodebookHash
-	remoteHash := make([]byte, 32)
-	if _, err := s.Read(remoteHash); err != nil {
-		return fmt.Errorf("auth: failed to read hash: %w", err)
-	}
-
-	// 3. Verify Sovereignty
-	if !bytes.Equal(n.CodebookHash[:], remoteHash) {
-		n.Host.Network().ClosePeer(pid) // Disconnect
-		return fmt.Errorf("auth: Codebook mismatch (Sovereignty violation)")
-	}
-
 	return nil
+}
+
+// IsAuthenticated reports whether the peer proved it holds the same brain.
+func (n *CromNode) IsAuthenticated(pid peer.ID) bool {
+	_, ok := n.authenticated.Load(pid)
+	return ok
 }
 
 // discoveryNotifee implements mdns.Notifee interface

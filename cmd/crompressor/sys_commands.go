@@ -172,7 +172,7 @@ func keysCmd() *cobra.Command {
 	return cmd
 }
 func trustCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "trust <peerID>", Short: "Adiciona um Peer ID à Web of Trust para receber Codebooks", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "trust <peerID>", Short: "Adiciona um Peer ID à Web of Trust", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		peerID := args[0]
 		err := network.TrustPeer(peerID)
 		if err != nil {

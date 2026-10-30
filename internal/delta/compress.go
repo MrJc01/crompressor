@@ -129,3 +129,20 @@ func NewBrainReader(r io.Reader, dict []byte) (*zstd.Decoder, error) {
 	}
 	return dec, nil
 }
+
+// DecompressPoolLimit is DecompressPool for untrusted input, failing past maxSize bytes.
+func DecompressPoolLimit(compressed []byte, maxSize int64) ([]byte, error) {
+	dec, err := zstd.NewReader(bytes.NewReader(compressed), zstd.WithDecoderConcurrency(1))
+	if err != nil {
+		return nil, fmt.Errorf("delta: init zstd decoder: %w", err)
+	}
+	defer dec.Close()
+	out, err := io.ReadAll(io.LimitReader(dec, maxSize+1))
+	if err != nil {
+		return nil, fmt.Errorf("delta: decompress: %w", err)
+	}
+	if int64(len(out)) > maxSize {
+		return nil, fmt.Errorf("delta: decompressed data exceeds %d bytes", maxSize)
+	}
+	return out, nil
+}
