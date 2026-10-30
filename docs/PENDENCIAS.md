@@ -17,9 +17,20 @@
 
 ## Ideia: vídeo em cima de um projeto existente
 
-- [ ] Avaliar, a partir de um repositório como `crom-crompressor-ar`, comprimir horas de vídeo
-      sem perda perceptível, com codebook treinado, deduplicação e montadores do arquivo final.
-      O bitstream já comprimido não deduplica: testar em quadros decodificados ou blocos do codec.
+Comprimir horas de vídeo com codebook treinado, deduplicação e montadores do arquivo final.
+
+- MP4 comum não deduplica: H.264/H.265 já removeram a repetição. Só cópias idênticas ganham.
+- É preciso trabalhar em quadros decodificados. Bit a bit, costuma dar mais que o MP4; sem perda
+  perceptível, compete com AV1. Faz sentido em acervos repetitivos: câmeras fixas, aulas,
+  telejornais, vinhetas (Crom TV).
+- Base: `crompressor-video` já decodifica com FFmpeg em blocos de 768 bytes, mas o `encode` grava
+  só o hash do bloco mais próximo, sem resíduo: é com perda, e o cérebro é um `.gob` em RAM.
+  `crom-crompressor-ar` é um cofre por arquivo inteiro, útil para cópias e como interface.
+
+- [ ] Primeiro teste barato: em 1 a 2 horas de vídeo real repetitivo, medir quantos blocos de
+      imagem se repetem e comparar com o mesmo vídeo em AV1 (tamanho e qualidade, com VMAF ou SSIM).
+- [ ] Só se compensar: criar o pipeline quadros → motor → montador, com resíduo para a qualidade.
+- [ ] Conferir se o `crom-crompressor-ar` funciona com o formato novo do motor.
 
 ## Prioridade média
 
