@@ -8,6 +8,16 @@ import (
 // with LSH diversity filtering to avoid bucket saturation.
 // maxPerBucket limits how many codewords share the same LSH bucket.
 func SelectElite(table *FrequencyTable, maxCodewords int, maxPerBucket int) [][]byte {
+	picked := selectPicked(table, maxCodewords, maxPerBucket)
+	selected := make([][]byte, len(picked))
+	for i, entry := range picked {
+		selected[i] = entry.Data
+	}
+	return selected
+}
+
+// selectPicked returns the chosen entries, in reading order.
+func selectPicked(table *FrequencyTable, maxCodewords int, maxPerBucket int) []*PatternEntry {
 	all := table.All()
 
 	// Sort descending by frequency
@@ -28,7 +38,10 @@ func SelectElite(table *FrequencyTable, maxCodewords int, maxPerBucket int) [][]
 			break
 		}
 
-		bucket := computeLSHBucket(entry.Data)
+		bucket := entry.Bucket
+		if entry.Data != nil {
+			bucket = computeLSHBucket(entry.Data)
+		}
 
 		// Diversity filter: skip if this bucket is already saturated
 		if bucketCount[bucket] >= maxPerBucket {
@@ -44,11 +57,7 @@ func SelectElite(table *FrequencyTable, maxCodewords int, maxPerBucket int) [][]
 	sort.SliceStable(picked, func(i, j int) bool {
 		return picked[i].First < picked[j].First
 	})
-	selected := make([][]byte, len(picked))
-	for i, entry := range picked {
-		selected[i] = entry.Data
-	}
-	return selected
+	return picked
 }
 
 // computeLSHBucket generates a 16-bit locality hash (same algorithm as search/lsh.go).

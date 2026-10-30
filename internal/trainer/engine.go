@@ -130,7 +130,11 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 				}
 
 				for {
-					n, errRead := f.Read(buf)
+					// Full reads keep chunk boundaries identical on the second pass.
+					n, errRead := io.ReadFull(f, buf)
+					if errRead == io.ErrUnexpectedEOF {
+						errRead = io.EOF
+					}
 					if n > 0 {
 						if opts.UseBPE {
 							mu.Lock()
@@ -146,7 +150,12 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 						} else {
 							chunks := fc.Split(buf[:n])
 							for _, c := range chunks {
-								if len(c.Data) == opts.ChunkSize {
+								if len(c.Data) != opts.ChunkSize {
+									continue
+								}
+								if opts.DataAugmentation {
+									ft.Record(c.Data) // Augmentation needs the bytes
+								} else {
 									ft.RecordAt(c.Data, pos+c.Offset)
 								}
 							}
@@ -169,6 +178,19 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 		}()
 	}
 	wg.Wait()
+
+	// elite picks the patterns and, on a second pass, reads the bytes of the chosen ones.
+	elite := func() ([][]byte, error) {
+		picked := selectPicked(ft, opts.MaxCodewords, opts.MaxPerBucket)
+		if err := readPickedData(picked, files, fc); err != nil {
+			return nil, err
+		}
+		out := make([][]byte, len(picked))
+		for i, entry := range picked {
+			out[i] = entry.Data
+		}
+		return out, nil
+	}
 
 	var selected [][]byte
 	var uniquePatterns int
@@ -214,7 +236,9 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 			}
 
 			// Now select the best of old + new combined
-			selected = SelectElite(ft, opts.MaxCodewords, opts.MaxPerBucket)
+			if selected, err = elite(); err != nil {
+				return nil, err
+			}
 			replacedSlots = mergedPatterns - countOverlap(existingPatterns, selected)
 
 		} else if opts.BasePath != "" {
@@ -227,7 +251,10 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 			mergedPatterns = len(basePatterns)
 
 			// Select new elite from fresh data only
-			newElite := SelectElite(ft, opts.MaxCodewords, opts.MaxPerBucket)
+			newElite, err := elite()
+			if err != nil {
+				return nil, err
+			}
 
 			// Merge: base patterns fill the codebook first, then the best new patterns replace the weakest base slots.
 			selected = mergeBaseWithNew(basePatterns, newElite, opts.MaxCodewords)
@@ -235,7 +262,9 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 
 		} else {
 			// --- STANDARD TRAINING ---
-			selected = SelectElite(ft, opts.MaxCodewords, opts.MaxPerBucket)
+			if selected, err = elite(); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -316,4 +345,41 @@ func hashPattern(data []byte) uint64 {
 		h *= 1099511628211
 	}
 	return h
+}
+
+// readPickedData fills in the bytes of the chosen entries by reading the corpus again.
+func readPickedData(picked []*PatternEntry, files []string, fc chunker.Chunker) error {
+	missing := make(map[uint64]*PatternEntry)
+	for _, entry := range picked {
+		if entry.Data == nil {
+			missing[entry.Hash] = entry
+		}
+	}
+	buf := make([]byte, 16*1024*1024)
+	for _, path := range files {
+		if len(missing) == 0 {
+			return nil
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		for len(missing) > 0 {
+			n, errRead := io.ReadFull(f, buf)
+			for _, c := range fc.Split(buf[:n]) {
+				if entry, ok := missing[c.Hash]; ok {
+					entry.Data = append([]byte(nil), c.Data...)
+					delete(missing, c.Hash)
+				}
+			}
+			if errRead != nil {
+				break
+			}
+		}
+		f.Close()
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("trainer: %d patterns disappeared from the corpus during training", len(missing))
+	}
+	return nil
 }

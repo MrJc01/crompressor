@@ -12,6 +12,7 @@ type PatternEntry struct {
 	Count uint32
 	Data  []byte
 	First uint64 // Position of the first occurrence, to number the brain in reading order
+	Bucket uint16 // LSH bucket; Data may be nil until the selected patterns are read back
 }
 
 // FrequencyTable tracks the occurrence count of every unique chunk pattern.
@@ -49,7 +50,8 @@ func (ft *FrequencyTable) Record(data []byte) {
 	}
 }
 
-// RecordAt is Record for a pattern at a known position in the training data.
+// RecordAt is Record for a pattern at a known position in the training data. It keeps
+// no bytes, so memory depends on the unique patterns and not on their size.
 func (ft *FrequencyTable) RecordAt(data []byte, pos uint64) {
 	h := xxhash.Sum64(data)
 
@@ -62,9 +64,7 @@ func (ft *FrequencyTable) RecordAt(data []byte, pos uint64) {
 			entry.First = pos
 		}
 	} else {
-		cp := make([]byte, len(data))
-		copy(cp, data)
-		ft.entries[h] = &PatternEntry{Hash: h, Count: 1, Data: cp, First: pos}
+		ft.entries[h] = &PatternEntry{Hash: h, Count: 1, First: pos, Bucket: computeLSHBucket(data)}
 	}
 }
 
