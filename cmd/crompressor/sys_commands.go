@@ -247,7 +247,7 @@ func mountCmd() *cobra.Command {
 }
 func cromfsCmd() *cobra.Command {
 	var mountPoint, outPool, codebookPath string
-	cmd := &cobra.Command{Use: "cromfs", Short: "Monta o Daemon de Escrita FUSE (Global Deduplication)", Long: `Monta um sistema de arquivos onde todas as escritas são compresso-compiladas via CROM.`, RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "cromfs", Short: "[Experimental] Grava em .crom pelo FUSE; a montagem não lista os arquivos", Long: `Monta um sistema de arquivos onde todas as escritas são compresso-compiladas via CROM.`, RunE: func(cmd *cobra.Command, args []string) error {
 		if mountPoint == "" || outPool == "" || codebookPath == "" {
 			return fmt.Errorf("flags --mountpoint, --out-pool e --codebook obrigatórias")
 		}
@@ -261,7 +261,7 @@ func cromfsCmd() *cobra.Command {
 }
 func llmVfsCmd() *cobra.Command {
 	var mountPoint string
-	cmd := &cobra.Command{Use: "llm-vfs", Short: "Monta o Daemon VFS puramente O(1) Paging para LLMs (Out-of-Core)", Long: `Monta uma abstração CROM-FS no diretório especificado para hospedar arquivos .gguf virtuais gigantes e paginar requisições em O(1) via dicionário JIT, bypassando limites da RAM física.`, RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := &cobra.Command{Use: "llm-vfs", Short: "[Demonstração] Monta arquivos GGUF fictícios; não lê modelos reais", Long: `Monta uma abstração CROM-FS no diretório especificado para hospedar arquivos .gguf virtuais gigantes e paginar requisições em O(1) via dicionário JIT, bypassando limites da RAM física.`, RunE: func(cmd *cobra.Command, args []string) error {
 		if mountPoint == "" {
 			return fmt.Errorf("flag --mountpoint obrigatória")
 		}

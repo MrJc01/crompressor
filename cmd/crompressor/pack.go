@@ -57,6 +57,10 @@ func packCmd() *cobra.Command {
 				useAutoTrain = true
 			}
 
+			if packMode == "edge" {
+				fmt.Println("⚠ Modo edge: o arquivo restaurado NÃO será igual ao original.")
+				fmt.Println("  Use só em dados que toleram erro; vídeo, binários e documentos ficam corrompidos.")
+			}
 			fmt.Println("╔═══════════════════════════════════════════╗")
 			fmt.Println("║              CROMPRESSOR PACK             ║")
 			fmt.Println("╠═══════════════════════════════════════════╣")

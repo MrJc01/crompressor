@@ -202,6 +202,8 @@ func Grep(target string, inputPath string, codebookPath string) error {
 	}
 
 	fmt.Printf("\n✔ Grep Neural (Zero-Payload) concluído em %v.\n", time.Since(start))
-	fmt.Printf("  Total de Ocorrências Semânticas: %d (Zero descompressões de bloco desnecessárias executadas).\n", matchCount)
+	fmt.Printf("  Blocos do cérebro com o texto: %d\n", matchCount)
+	fmt.Printf("  ⚠ Resultado parcial: só vê texto inteiro em uma entrada do cérebro. Literais e texto\n")
+	fmt.Printf("    dividido entre blocos não entram. Para busca completa, use mount ou unpack.\n")
 	return nil
 }

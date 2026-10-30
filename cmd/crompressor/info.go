@@ -99,7 +99,11 @@ func infoCmd() *cobra.Command {
 
 				freq := make(map[uint64]int)
 				for _, e := range entries {
-					freq[e.CodebookID]++
+					id := e.CodebookID
+					if id != format.LiteralCodebookID {
+						id &^= format.FlagIsPatch // Internal flag, not part of the ID
+					}
+					freq[id]++
 				}
 
 				type idCount struct {
