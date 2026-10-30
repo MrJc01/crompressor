@@ -101,6 +101,11 @@ func (cr *Reader) ReadMetadata(encryptionKey string) (*Header, []uint32, []Chunk
 		}
 	}
 
+	// A passthrough file has no chunk table: the payload starts right here.
+	if header.ChunkCount == 0 {
+		return header, blockTable, nil, nil
+	}
+
 	// 3. Read Chunk Table
 	// If encrypted, the length of the ciphertext is greater due to the 12-byte nonce and 16-byte tag (28 bytes overhead).
 	tableSize := int(header.ChunkCount) * int(GetEntrySize(header.Version))

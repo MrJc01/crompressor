@@ -230,6 +230,42 @@ func TestEmbeddedBrainRestoresWithoutCodebook(t *testing.T) {
 	}
 }
 
+// Incompressible data falls back to passthrough, which must stay encrypted.
+func TestEncryptedPassthroughIsEncryptedAndRestores(t *testing.T) {
+	dir := t.TempDir()
+	data := randomBytes(256 * 1024)
+	brain := trainBrain(t, dir, randomBytes(64*1024))
+	in := filepath.Join(dir, "in.bin")
+	os.WriteFile(in, data, 0644)
+
+	pack := map[string]func(string, PackOptions) error{
+		"brain":    func(p string, o PackOptions) error { _, err := Pack(in, p, brain, o); return err },
+		"noBrain":  func(p string, o PackOptions) error { _, err := Pack(in, p, "", o); return err },
+		"autoPack": func(p string, o PackOptions) error { _, err := AutoPack(in, p, o); return err },
+	}
+	for name, run := range pack {
+		packed := filepath.Join(dir, name+".crom")
+		opts := DefaultPackOptions()
+		opts.EncryptionKey = "segredo"
+		if err := run(packed, opts); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		raw, _ := os.ReadFile(packed)
+		if bytes.Contains(raw, data[1000:1064]) {
+			t.Errorf("%s: plaintext found in an encrypted file", name)
+		}
+		uopts := DefaultUnpackOptions()
+		uopts.EncryptionKey = "segredo"
+		out := filepath.Join(dir, name+".out")
+		if err := Unpack(packed, out, brain, uopts); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got, _ := os.ReadFile(out); !bytes.Equal(got, data) {
+			t.Fatalf("%s: restored file differs", name)
+		}
+	}
+}
+
 func TestFileThatNeedsBrainExplainsIt(t *testing.T) {
 	dir := t.TempDir()
 	data := randomBytes(64 * 1024)

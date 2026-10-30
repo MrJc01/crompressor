@@ -781,7 +781,21 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		// Re-read input and compute hash simultaneously
 		inFile.Seek(0, 0)
 		ptHasher := sha256.New()
-		io.Copy(io.MultiWriter(outFile, ptHasher), inFile)
+		if header.IsEncrypted {
+			fullData, err := io.ReadAll(io.TeeReader(inFile, ptHasher))
+			if err != nil {
+				return nil, err
+			}
+			enc, err := crypto.Encrypt(derivedKey, fullData)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := outFile.Write(enc); err != nil {
+				return nil, err
+			}
+		} else if _, err := io.Copy(io.MultiWriter(outFile, ptHasher), inFile); err != nil {
+			return nil, err
+		}
 
 		// Update header with correct hash
 		copy(header.OriginalHash[:], ptHasher.Sum(nil))
