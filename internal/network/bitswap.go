@@ -54,7 +54,16 @@ func StreamChunks(localPath, codebookPath, encryptionKey string, indices []uint3
 				blockData = dec
 			}
 
-			decompressed, err := delta.DecompressPool(blockData)
+			var dict []byte
+			if header.UsesBrainDict {
+				cb, err := loadCb(codebookPath)
+				if err != nil {
+					return fmt.Errorf("bitswap: open codebook: %w", err)
+				}
+				defer cb.Close()
+				dict = cb.Dictionary()
+			}
+			decompressed, err := delta.DecompressPoolDict(blockData, dict)
 			if err != nil {
 				return fmt.Errorf("bitswap: decompress block %d: %w", i, err)
 			}
@@ -106,6 +115,13 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 	residuals := make(map[uint32][]byte)
 	var received int64
 
+	cb, err := loadCb(codebookPath)
+	if err != nil {
+		return 0, fmt.Errorf("bitswap: open codebook: %w", err)
+	}
+	defer cb.Close()
+	brainDict := cb.Dictionary()
+
 	// 1. Read the missing chunks from network
 	for i := 0; i < len(missingIndices); i++ {
 		header := make([]byte, 8)
@@ -143,6 +159,10 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 			if lHeader.IsEncrypted {
 				derivedKey = crypto.DeriveKey([]byte(encryptionKey), lHeader.Salt[:])
 			}
+			var localDict []byte
+			if lHeader.UsesBrainDict {
+				localDict = brainDict
+			}
 			var pool []byte
 			for i, blockSize := range lBlockTable {
 				blockData := make([]byte, blockSize)
@@ -156,7 +176,7 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 						return received, fmt.Errorf("bitswap: decrypt local block %d: %w", i, err)
 					}
 				}
-				decompressed, err := delta.DecompressPool(blockData)
+				decompressed, err := delta.DecompressPoolDict(blockData, localDict)
 				if err != nil {
 					f.Close()
 					return received, fmt.Errorf("bitswap: decompress local block %d: %w", i, err)
@@ -182,9 +202,10 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 	defer outFile.Close()
 
 	fileHeader := &format.Header{
-		Version:      format.Version7,
-		OriginalSize: manifest.OriginalSize,
-		ChunkCount:   manifest.ChunkCount,
+		Version:       format.Version7,
+		OriginalSize:  manifest.OriginalSize,
+		ChunkCount:    manifest.ChunkCount,
+		UsesBrainDict: true,
 	}
 	copy(fileHeader.OriginalHash[:], manifest.OriginalHash[:])
 
@@ -240,7 +261,7 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 			currentOffset += uint64(len(res))
 		}
 
-		compBlock, err := delta.CompressPool(blockPlainDeltas)
+		compBlock, err := delta.CompressPoolDict(blockPlainDeltas, brainDict)
 		if err != nil {
 			return received, fmt.Errorf("bitswap: repack compress block: %w", err)
 		}

@@ -137,7 +137,11 @@ func Grep(target string, inputPath string, codebookPath string) error {
 					
 					buf := make([]byte, blockSize)
 					if _, err := file.ReadAt(buf, fileOff); err == nil || err == io.EOF {
-						if decompressed, err := delta.DecompressPool(buf); err == nil {
+						var dict []byte
+						if header.UsesBrainDict {
+							dict = cb.Dictionary()
+						}
+						if decompressed, err := delta.DecompressPoolDict(buf, dict); err == nil {
 							pool = decompressed
 							blockCache[blockIdx] = pool
 						}

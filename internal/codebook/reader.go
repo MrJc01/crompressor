@@ -34,3 +34,15 @@ func (r *Reader) CodewordSize() uint16 {
 func (r *Reader) BuildHash() [BuildHashSize]byte {
 	return r.header.BuildHash
 }
+
+// Dictionary returns the codeword data, for use as a compression dictionary.
+func (r *Reader) Dictionary() []byte {
+	data := r.data[r.header.DataOffset:]
+	if len(data) > maxDictionarySize {
+		data = data[len(data)-maxDictionarySize:]
+	}
+	return data
+}
+
+// maxDictionarySize matches the compression window, beyond which a dictionary is unreachable.
+const maxDictionarySize = 32*1024*1024 - 1024

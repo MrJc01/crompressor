@@ -163,8 +163,18 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) (err
 	}
 
 	var maxID uint64
+	var brainDict []byte
 	if cb != nil {
 		maxID = cb.CodewordCount() - 1
+	}
+	if header.UsesBrainDict {
+		if cb == nil {
+			if cb, err = openBrain(header, codebookPath, opts.EncryptionKey); err != nil {
+				return err
+			}
+			defer cb.Close()
+		}
+		brainDict = cb.Dictionary()
 	}
 
 	if header.Version >= format.Version2 {
@@ -198,7 +208,7 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) (err
 			var uncompressedBlock []byte
 			var decompressErr error
 			for retry := 0; retry < 3; retry++ {
-				uncompressedBlock, decompressErr = delta.DecompressPool(blockData)
+				uncompressedBlock, decompressErr = delta.DecompressPoolDict(blockData, brainDict)
 				if decompressErr == nil {
 					break
 				}

@@ -95,7 +95,11 @@ func GenerateManifest(cromFile string, codebookPath string, encryptionKey string
 				blockData = dec
 			}
 
-			decompressed, err := delta.DecompressPool(blockData)
+			var dict []byte
+			if header.UsesBrainDict {
+				dict = cb.Dictionary()
+			}
+			decompressed, err := delta.DecompressPoolDict(blockData, dict)
 			if err != nil {
 				return nil, fmt.Errorf("manifest: decompress block %d: %w", i, err)
 			}

@@ -274,7 +274,11 @@ func (rr *RandomReader) loadBlockPool(blockID uint32) ([]byte, error) {
 		buf = dec
 	}
 
-	pool, err := delta.DecompressPool(buf)
+	var dict []byte
+	if rr.header.UsesBrainDict {
+		dict = rr.cb.Dictionary()
+	}
+	pool, err := delta.DecompressPoolDict(buf, dict)
 	if err != nil {
 		return nil, fmt.Errorf("decompress pool: %w", err)
 	}

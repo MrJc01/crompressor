@@ -91,7 +91,11 @@ func UnpackBytes(cromData []byte, codebookData []byte, opts UnpackOptions) ([]by
 				blockData = dec
 			}
 
-			uncompressedBlock, err := delta.DecompressPool(blockData)
+			var dict []byte
+			if header.UsesBrainDict {
+				dict = cb.Dictionary()
+			}
+			uncompressedBlock, err := delta.DecompressPoolDict(blockData, dict)
 			if err != nil {
 				return nil, fmt.Errorf("unpackbytes: decompress block %d: %w", i, err)
 			}

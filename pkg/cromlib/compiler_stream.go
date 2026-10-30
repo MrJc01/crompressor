@@ -61,6 +61,11 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 		fc = chunker.NewFixedChunker(chunkSize)
 	}
 
+	var brainDict []byte
+	if cb != nil {
+		brainDict = cb.Dictionary()
+	}
+
 	hasher := sha256.New()
 
 	var allEntries []format.ChunkEntry
@@ -120,7 +125,7 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 					defer wg.Done()
 					for i := range jobs {
 						c := chunks[i]
-						
+
 						literal := processedChunk{
 							entry: format.ChunkEntry{
 								CodebookID:   format.LiteralCodebookID,
@@ -143,7 +148,7 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 							continue
 						}
 
-						if opts.Mode != "edge" && entropy.Shannon(c.Data) > 7.8 {
+						if opts.Mode != "edge" && (chunkSize >= search.AlignedMinCodewordSize || entropy.Shannon(c.Data) > 7.8) {
 							results[i] = literal
 							continue
 						}
@@ -209,7 +214,7 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 			allEntries = append(allEntries, blockEntries...)
 
 			// Compress block and write to temp
-			compBlock, err := delta.CompressPool(blockDeltas)
+			compBlock, err := delta.CompressPoolDict(blockDeltas, brainDict)
 			if err != nil {
 				return nil, fmt.Errorf("stream: compress block: %w", err)
 			}
@@ -244,13 +249,14 @@ func PackStream(in io.Reader, outPath string, codebookPath string, opts PackOpti
 	merkleRoot := merkleTree.Root()
 
 	header := &format.Header{
-		Version:      format.Version5,
-		OriginalSize: totalBytesRead,
-		ChunkCount:   uint32(len(allEntries)),
-		OriginalHash: hashArr,
-		MerkleRoot:   merkleRoot,
-		ChunkSize:    uint32(chunkSize),
-		IsLossy:      cb != nil && opts.Mode == "edge",
+		Version:       format.Version5,
+		OriginalSize:  totalBytesRead,
+		ChunkCount:    uint32(len(allEntries)),
+		OriginalHash:  hashArr,
+		MerkleRoot:    merkleRoot,
+		ChunkSize:     uint32(chunkSize),
+		IsLossy:       cb != nil && opts.Mode == "edge",
+		UsesBrainDict: cb != nil,
 	}
 
 	headerBytes := header.Serialize()

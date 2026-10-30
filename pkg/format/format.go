@@ -103,6 +103,7 @@ type Header struct {
 	IsPassthrough         bool
 	IsConvergentEncrypted bool
 	IsLossy               bool // Packed in edge mode: the output will not match OriginalHash
+	UsesBrainDict         bool // Blocks were compressed with the brain as zstd dictionary
 	Salt                  [16]byte
 	OriginalHash          [HashSize]byte
 	OriginalSize          uint64
@@ -111,8 +112,8 @@ type Header struct {
 	CodebookHash          [8]byte    // Used for V4 and V5
 	CodebookHashes        [3][8]byte // Used for V6 (L1, L2, L3 brains)
 	MerkleRoot            [32]byte
-	MicroDictSize         uint32     // Used for V8 (Metamorphic In-band Brain)
-	MicroDictionaryData   []byte     // Used for V8 (Dynamic array holding BPE patterns)
+	MicroDictSize         uint32             // Used for V8 (Metamorphic In-band Brain)
+	MicroDictionaryData   []byte             // Used for V8 (Dynamic array holding BPE patterns)
 	Mutations             []V9MutationHeader // Used for V9 to hold metadata of appended deltas
 }
 
@@ -235,12 +236,13 @@ func ParseHeader(data []byte) (*Header, error) {
 		if h.Version >= Version3 {
 			h.IsPassthrough = data[7]&1 != 0
 			h.IsLossy = data[7]&2 != 0
+			h.UsesBrainDict = data[7]&4 != 0
 		}
 		copy(h.Salt[:], data[8:24])
 		copy(h.OriginalHash[:], data[24:56])
 		h.OriginalSize = binary.LittleEndian.Uint64(data[56:64])
 		h.ChunkCount = binary.LittleEndian.Uint32(data[64:68])
-		
+
 		if h.Version >= Version4 {
 			h.ChunkSize = binary.LittleEndian.Uint32(data[68:72])
 			copy(h.CodebookHash[:], data[72:80]) // Legacy location
@@ -291,7 +293,7 @@ func (h *Header) Serialize() []byte {
 	if h.Version < Version2 || h.Version > Version8 {
 		h.Version = Version8
 	}
-	
+
 	size := HeaderSizeV2
 	if h.Version == Version4 {
 		size = HeaderSizeV4
@@ -302,7 +304,7 @@ func (h *Header) Serialize() []byte {
 	} else if h.Version >= Version8 {
 		size = HeaderSizeV8 + int(h.MicroDictSize)
 	}
-	
+
 	buf := make([]byte, size)
 	copy(buf[0:MagicSize], MagicString)
 	binary.LittleEndian.PutUint16(buf[4:6], h.Version)
@@ -315,11 +317,14 @@ func (h *Header) Serialize() []byte {
 	if h.IsLossy {
 		buf[7] |= 2
 	}
+	if h.UsesBrainDict {
+		buf[7] |= 4
+	}
 	copy(buf[8:24], h.Salt[:])
 	copy(buf[24:56], h.OriginalHash[:])
 	binary.LittleEndian.PutUint64(buf[56:64], h.OriginalSize)
 	binary.LittleEndian.PutUint32(buf[64:68], h.ChunkCount)
-	
+
 	if h.Version >= Version4 {
 		binary.LittleEndian.PutUint32(buf[68:72], h.ChunkSize)
 		if h.Version >= Version6 {
@@ -329,7 +334,7 @@ func (h *Header) Serialize() []byte {
 			copy(buf[72:80], h.CodebookHash[:])
 		}
 	}
-	
+
 	if h.Version >= Version5 {
 		copy(buf[80:112], h.MerkleRoot[:])
 	}
@@ -342,14 +347,14 @@ func (h *Header) Serialize() []byte {
 		copy(buf[121:129], h.CodebookHashes[1][:])
 		copy(buf[129:137], h.CodebookHashes[2][:])
 	}
-	
+
 	if h.Version >= Version8 {
 		binary.LittleEndian.PutUint32(buf[137:141], h.MicroDictSize)
 		if h.MicroDictSize > 0 {
 			copy(buf[141:141+h.MicroDictSize], h.MicroDictionaryData)
 		}
 	}
-	
+
 	return buf
 }
 

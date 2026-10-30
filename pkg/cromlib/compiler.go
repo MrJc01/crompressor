@@ -185,7 +185,15 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 		IsPassthrough: isPassthrough,
 		ChunkSize:     uint32(opts.ChunkSize),
 		IsLossy:       hasBrain && opts.Mode == "edge",
+		UsesBrainDict: len(cbs) > 0,
 	}
+	var brainDict []byte
+	if len(cbs) > 0 {
+		brainDict = cbs[0].Dictionary()
+	}
+	// With large codewords, whatever is not identical goes as a literal: compressing
+	// it against the brain dictionary beats XOR against a single pattern.
+	literalIfNotExact := opts.ChunkSize >= search.AlignedMinCodewordSize && !opts.UseCDC && !opts.UseACAC
 
 	if len(cbs) > 0 {
 		cbHashFull := cbs[0].BuildHash()
@@ -448,7 +456,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 							}
 						}
 
-						if opts.Mode != "edge" && (chunkEntropy > 7.8 || entropy.DetectHeuristicBypass(chunkEntropy, chunk.Data)) {
+						if opts.Mode != "edge" && (literalIfNotExact || chunkEntropy > 7.8 || entropy.DetectHeuristicBypass(chunkEntropy, chunk.Data)) {
 							// Passthrough High-Entropy Chunk (Treat as Literal immediately)
 							results[i] = processedChunk{
 								res: chunk.Data,
@@ -608,7 +616,7 @@ func Pack(inputPath, outputPath, codebookPath string, opts PackOptions) (*Metric
 			}
 
 			// Compress this independent block
-			compBlock, err := delta.CompressPool(blockPlainDeltas)
+			compBlock, err := delta.CompressPoolDict(blockPlainDeltas, brainDict)
 			if err != nil {
 				return nil, fmt.Errorf("pack: compress block: %w", err)
 			}

@@ -99,13 +99,13 @@ func PackBytes(input []byte, codebookData []byte, opts PackOptions) ([]byte, *Me
 			chunkEntropy := entropy.Shannon(chunk.Data)
 
 			// High entropy bypass in archive mode
-			if opts.Mode != "edge" && chunkEntropy > 7.8 {
+			if opts.Mode != "edge" && (chunkSize >= search.AlignedMinCodewordSize || chunkEntropy > 7.8) {
 				entries = append(entries, format.ChunkEntry{
-					CodebookID:   format.LiteralCodebookID,
+					CodebookID:    format.LiteralCodebookID,
 					CodebookIndex: format.LiteralCodebookIndex,
-					DeltaOffset:  currentOffset,
-					DeltaSize:    uint32(len(chunk.Data)),
-					OriginalSize: uint32(chunk.Size),
+					DeltaOffset:   currentOffset,
+					DeltaSize:     uint32(len(chunk.Data)),
+					OriginalSize:  uint32(chunk.Size),
 				})
 				deltaPool = append(deltaPool, chunk.Data...)
 				currentOffset += uint64(len(chunk.Data))
@@ -117,11 +117,11 @@ func PackBytes(input []byte, codebookData []byte, opts PackOptions) ([]byte, *Me
 			if err != nil {
 				// No match — store as literal
 				entries = append(entries, format.ChunkEntry{
-					CodebookID:   format.LiteralCodebookID,
+					CodebookID:    format.LiteralCodebookID,
 					CodebookIndex: format.LiteralCodebookIndex,
-					DeltaOffset:  currentOffset,
-					DeltaSize:    uint32(len(chunk.Data)),
-					OriginalSize: uint32(chunk.Size),
+					DeltaOffset:   currentOffset,
+					DeltaSize:     uint32(len(chunk.Data)),
+					OriginalSize:  uint32(chunk.Size),
 				})
 				deltaPool = append(deltaPool, chunk.Data...)
 				currentOffset += uint64(len(chunk.Data))
@@ -158,18 +158,17 @@ func PackBytes(input []byte, codebookData []byte, opts PackOptions) ([]byte, *Me
 			}
 
 			entries = append(entries, format.ChunkEntry{
-				CodebookID:   codeID,
+				CodebookID:    codeID,
 				CodebookIndex: 0,
-				DeltaOffset:  currentOffset,
-				DeltaSize:    uint32(len(residual)),
-				OriginalSize: uint32(chunk.Size),
+				DeltaOffset:   currentOffset,
+				DeltaSize:     uint32(len(residual)),
+				OriginalSize:  uint32(chunk.Size),
 			})
 			deltaPool = append(deltaPool, residual...)
 			currentOffset += uint64(len(residual))
 		}
 
-
-		compressedPool, err := delta.CompressPool(deltaPool)
+		compressedPool, err := delta.CompressPoolDict(deltaPool, cb.Dictionary())
 		if err != nil {
 			return nil, nil, fmt.Errorf("packbytes: compress pool: %w", err)
 		}
@@ -178,11 +177,12 @@ func PackBytes(input []byte, codebookData []byte, opts PackOptions) ([]byte, *Me
 
 	// 6. Build the .crom binary in memory
 	header := &format.Header{
-		Version:      format.Version5,
-		IsLossy:      opts.Mode == "edge",
-		OriginalSize: originalSize,
-		ChunkCount:   uint32(len(entries)),
-		ChunkSize:    uint32(chunkSize),
+		Version:       format.Version5,
+		IsLossy:       opts.Mode == "edge",
+		UsesBrainDict: true,
+		OriginalSize:  originalSize,
+		ChunkCount:    uint32(len(entries)),
+		ChunkSize:     uint32(chunkSize),
 	}
 	copy(header.OriginalHash[:], originalHash[:])
 
