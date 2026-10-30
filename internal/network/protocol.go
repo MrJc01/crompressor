@@ -39,6 +39,8 @@ const (
 // SyncProtocol handles manifest exchange and chunk transfers.
 type SyncProtocol struct {
 	node *CromNode
+	// BytesReceived counts what the last RequestSync read from the network.
+	BytesReceived int64
 }
 
 // NewSyncProtocol registers the sync stream handler.
@@ -256,6 +258,10 @@ func (p *SyncProtocol) RequestSync(ctx context.Context, pid peer.ID, filename st
 	if err != nil {
 		return fmt.Errorf("sync: parse remote manifest: %w", err)
 	}
+	if remoteManifest.ChunkCount == 0 && remoteManifest.OriginalSize > 0 {
+		return fmt.Errorf("sync: '%s' foi empacotado sem chunks (passthrough), nao ha o que sincronizar por manifesto", filename)
+	}
+	p.BytesReceived = int64(len(payload)) + 5
 
 	fmt.Printf("[Sync] Recebido manifesto para '%s' (%d chunks totais)\n", filename, remoteManifest.ChunkCount)
 
@@ -326,7 +332,8 @@ func (p *SyncProtocol) RequestSync(ctx context.Context, pid peer.ID, filename st
 	// 5. Receive Chunks and Rebuild .crom
 	fmt.Printf("[Sync] Iniciando bitswap reverso de %d chunks faltantes...\n", len(missingIndices))
 	tempPath := destPath + ".tmp"
-	err = ReceiveChunks(tempPath, destPath, remoteManifest, missingIndices, s, p.node.CodebookPath, p.node.EncKey)
+	received, err := ReceiveChunks(tempPath, destPath, remoteManifest, missingIndices, s, p.node.CodebookPath, p.node.EncKey)
+	p.BytesReceived += received
 	if err != nil {
 		os.Remove(tempPath)
 		return fmt.Errorf("sync: bitswap merge error: %w", err)

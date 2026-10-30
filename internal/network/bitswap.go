@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/libp2p/go-libp2p/core/network"
 
 	"github.com/MrJc01/crompressor/internal/codebook"
@@ -99,16 +100,11 @@ func StreamChunks(localPath, codebookPath, encryptionKey string, indices []uint3
 	return nil
 }
 
-// ReceiveChunks reads streamed deltas, buffers them, and builds a robust V2 .crom file leveraging existing chunks.
-// NOVO: Adicionada tolerância SRE p/ pacotes P2P em redes 4G instáveis (Pesquisa 26 - Forward Error Correction).
-func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkManifest, missingIndices []uint32, s network.Stream, codebookPath string, encryptionKey string) error {
+// ReceiveChunks reads streamed deltas and rebuilds the .crom file, taking the chunks
+// it already has from the local version. It returns the bytes read from the network.
+func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkManifest, missingIndices []uint32, s network.Stream, codebookPath string, encryptionKey string) (int64, error) {
 	residuals := make(map[uint32][]byte)
-
-	// [V21] Forward Error Correction Initialization
-	// Se o sinal de rádio/Satélite falhar localmente, o CROM exigirá apenas Shards de Paridade
-	// para remontar a matemática do Array, poupando Re-Downloads e Rádio do Hardware Hospedeiro.
-	fecEngine := NewFECEngine(4, 2)
-	_ = fecEngine // (Engaged on byte loss pipeline)
+	var received int64
 
 	// 1. Read the missing chunks from network
 	for i := 0; i < len(missingIndices); i++ {
@@ -117,7 +113,7 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 			if err == io.EOF {
 				break
 			}
-			return fmt.Errorf("bitswap: read header: %w", err)
+			return received, fmt.Errorf("bitswap: read header: %w", err)
 		}
 
 		idx := binary.LittleEndian.Uint32(header[0:4])
@@ -126,134 +122,134 @@ func ReceiveChunks(tempPath string, outPath string, manifest *cromsync.ChunkMani
 		residual := make([]byte, size)
 		if size > 0 {
 			if _, err := io.ReadFull(s, residual); err != nil {
-				return fmt.Errorf("bitswap: read residual data: %w", err)
+				return received, fmt.Errorf("bitswap: read residual data: %w", err)
 			}
 		}
 
 		residuals[idx] = residual
+		received += int64(len(header)) + int64(size)
 	}
 
 	fmt.Printf("[Sync] Bitswap completo. %d chunks recebidos. Repackaging...\n", len(residuals))
 
-	// 2. Read existing residuals if we are patching instead of starting fresh
-	var localUncompressedPool []byte
-	var localEntries []format.ChunkEntry
-	if _, err := os.Stat(outPath); err == nil {
-		f, err := os.Open(outPath)
+	// 2. Index the residuals of the local version, which may be at other positions
+	type chunkKey struct{ CodebookID, DeltaHash uint64 }
+	local := make(map[chunkKey][]byte)
+	if f, err := os.Open(outPath); err == nil {
+		reader := format.NewReader(f)
+		lHeader, lBlockTable, lEnts, rStream, err := reader.ReadStream(encryptionKey)
 		if err == nil {
-			reader := format.NewReader(f)
-			lHeader, lBlockTable, lEnts, rStream, err := reader.ReadStream(encryptionKey)
-			if err == nil {
-				localEntries = lEnts
-				var derivedKey []byte
-				if lHeader.IsEncrypted {
-					derivedKey = crypto.DeriveKey([]byte(encryptionKey), lHeader.Salt[:])
+			var derivedKey []byte
+			if lHeader.IsEncrypted {
+				derivedKey = crypto.DeriveKey([]byte(encryptionKey), lHeader.Salt[:])
+			}
+			var pool []byte
+			for i, blockSize := range lBlockTable {
+				blockData := make([]byte, blockSize)
+				if _, err := io.ReadFull(rStream, blockData); err != nil {
+					f.Close()
+					return received, fmt.Errorf("bitswap: read local block %d: %w", i, err)
 				}
-				for _, blockSize := range lBlockTable {
-					blockData := make([]byte, blockSize)
-					io.ReadFull(rStream, blockData)
-					if lHeader.IsEncrypted {
-						blockData, _ = crypto.Decrypt(derivedKey, blockData)
+				if lHeader.IsEncrypted {
+					if blockData, err = crypto.Decrypt(derivedKey, blockData); err != nil {
+						f.Close()
+						return received, fmt.Errorf("bitswap: decrypt local block %d: %w", i, err)
 					}
-					decompressed, _ := delta.DecompressPool(blockData)
-					localUncompressedPool = append(localUncompressedPool, decompressed...)
+				}
+				decompressed, err := delta.DecompressPool(blockData)
+				if err != nil {
+					f.Close()
+					return received, fmt.Errorf("bitswap: decompress local block %d: %w", i, err)
+				}
+				pool = append(pool, decompressed...)
+			}
+			for _, le := range lEnts {
+				end := le.DeltaOffset + uint64(le.DeltaSize)
+				if end <= uint64(len(pool)) {
+					res := pool[le.DeltaOffset:end]
+					local[chunkKey{le.CodebookID, xxhash.Sum64(res)}] = res
 				}
 			}
-			f.Close()
 		}
+		f.Close()
 	}
 
 	// 3. Rebuild the .crom file from the manifest and the received residuals
 	outFile, err := os.Create(tempPath)
 	if err != nil {
-		return err
+		return received, err
 	}
 	defer outFile.Close()
 
 	fileHeader := &format.Header{
-		Version:      format.Version2,
+		Version:      format.Version7,
 		OriginalSize: manifest.OriginalSize,
 		ChunkCount:   manifest.ChunkCount,
-		IsEncrypted:  false,
 	}
 	copy(fileHeader.OriginalHash[:], manifest.OriginalHash[:])
 
-	headerBytes := fileHeader.Serialize()
-	if _, err := outFile.Write(headerBytes); err != nil {
-		return err
+	finalEntries := make([]format.ChunkEntry, manifest.ChunkCount)
+	for i, e := range manifest.Entries {
+		finalEntries[i] = format.ChunkEntry{
+			CodebookID:    e.CodebookID,
+			CodebookIndex: e.CodebookIndex,
+			OriginalSize:  e.ChunkSize,
+		}
+	}
+	blockStarts := format.BlockStarts(finalEntries)
+
+	metadataSize := int64(len(fileHeader.Serialize())) + int64(len(blockStarts))*4 + int64(manifest.ChunkCount)*int64(format.GetEntrySize(format.Version7))
+	if _, err := outFile.Seek(metadataSize, 0); err != nil {
+		return received, err
 	}
 
-	numBlocks := fileHeader.NumBlocks()
-	blockTable := make([]uint32, 0, numBlocks)
-
-	blockTableSpace := make([]byte, numBlocks*4)
-	outFile.Write(blockTableSpace)
-
-	chunkTableSpace := make([]byte, manifest.ChunkCount*format.GetEntrySize(format.Version2))
-	outFile.Write(chunkTableSpace)
-
-	finalEntries := make([]format.ChunkEntry, manifest.ChunkCount)
+	blockTable := make([]uint32, 0, len(blockStarts))
 	currentOffset := uint64(0)
 
-	for b := uint32(0); b < numBlocks; b++ {
+	for b := range blockStarts {
 		var blockPlainDeltas []byte
-
-		startIdx := b * format.ChunksPerBlock
-		endIdx := startIdx + format.ChunksPerBlock
-		if endIdx > manifest.ChunkCount {
-			endIdx = manifest.ChunkCount
-		}
+		startIdx, endIdx := format.BlockRange(blockStarts, b, len(finalEntries))
 
 		for idx := startIdx; idx < endIdx; idx++ {
-			res, ok := residuals[idx]
+			res, ok := residuals[uint32(idx)]
 			if !ok {
-				// Try fetching from local file
-				foundLocal := false
-				if idx < uint32(len(localEntries)) {
-					le := localEntries[idx]
-					eStart := le.DeltaOffset
-					eEnd := eStart + uint64(le.DeltaSize)
-					if eEnd <= uint64(len(localUncompressedPool)) {
-						res = localUncompressedPool[eStart:eEnd]
-						foundLocal = true
-					}
-				}
-				if !foundLocal {
-					return fmt.Errorf("bitswap: missing chunk %d for reconstruction", idx)
+				e := manifest.Entries[idx]
+				if res, ok = local[chunkKey{e.CodebookID, e.DeltaHash}]; !ok {
+					return received, fmt.Errorf("bitswap: missing chunk %d for reconstruction", idx)
 				}
 			}
 
-			finalEntries[idx] = format.ChunkEntry{
-				CodebookID:   manifest.Entries[idx].CodebookID,
-				DeltaOffset:  currentOffset,
-				DeltaSize:    uint32(len(res)),
-				OriginalSize: manifest.Entries[idx].ChunkSize,
-			}
-
+			finalEntries[idx].DeltaOffset = currentOffset
+			finalEntries[idx].DeltaSize = uint32(len(res))
 			blockPlainDeltas = append(blockPlainDeltas, res...)
 			currentOffset += uint64(len(res))
 		}
 
 		compBlock, err := delta.CompressPool(blockPlainDeltas)
 		if err != nil {
-			return fmt.Errorf("bitswap: repack compress block: %w", err)
+			return received, fmt.Errorf("bitswap: repack compress block: %w", err)
 		}
 
 		blockTable = append(blockTable, uint32(len(compBlock)))
-		outFile.Write(compBlock)
+		if _, err := outFile.Write(compBlock); err != nil {
+			return received, err
+		}
 	}
-
-	outFile.Seek(0, 0)
-	outFile.Write(fileHeader.Serialize())
 
 	blockTableRaw := make([]byte, len(blockTable)*4)
 	for i, size := range blockTable {
 		binary.LittleEndian.PutUint32(blockTableRaw[i*4:], size)
 	}
-	outFile.Write(blockTableRaw)
-	outFile.Write(format.SerializeChunkTable(finalEntries, format.Version2))
+	if _, err := outFile.Seek(0, 0); err != nil {
+		return received, err
+	}
+	for _, part := range [][]byte{fileHeader.Serialize(), blockTableRaw, format.SerializeChunkTable(finalEntries, format.Version7)} {
+		if _, err := outFile.Write(part); err != nil {
+			return received, err
+		}
+	}
 
-	return nil
+	return received, nil
 }
 
 // Ensure Codebook is opened and loaded since bit-swapping usually requires verification,

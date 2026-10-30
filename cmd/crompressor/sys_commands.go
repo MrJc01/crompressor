@@ -26,6 +26,7 @@ func addSystemCommands(rootCmd *cobra.Command) {
 	rootCmd.AddCommand(daemonCmd())
 	rootCmd.AddCommand(sharedDaemonCmd())
 	rootCmd.AddCommand(shareCmd())
+	rootCmd.AddCommand(pullCmd())
 	rootCmd.AddCommand(keysCmd())
 	rootCmd.AddCommand(trustCmd())
 	rootCmd.AddCommand(mountCmd())

@@ -25,8 +25,8 @@ import (
 const ManifestVersion uint16 = 1
 
 // ManifestEntryBinarySize is the fixed byte size of a serialized ManifestEntry.
-// Layout: CodebookID(8) + DeltaHash(8) + ChunkSize(4) = 20 bytes
-const ManifestEntryBinarySize = 20
+// Layout: CodebookID(8) + DeltaHash(8) + ChunkSize(4) + CodebookIndex(1) = 21 bytes
+const ManifestEntryBinarySize = 21
 
 // ChunkManifest represents the complete content-addressable map of a .crom file.
 type ChunkManifest struct {
@@ -42,6 +42,7 @@ type ManifestEntry struct {
 	CodebookID uint64 `json:"codebook_id"` // The Codebook pattern used
 	DeltaHash  uint64 `json:"delta_hash"`  // xxhash of the XOR residual
 	ChunkSize  uint32 `json:"chunk_size"`  // Original uncompressed size of this chunk
+	CodebookIndex uint8 `json:"codebook_index"` // Which brain or engine rebuilds this chunk
 }
 
 // DiffResult holds the result of comparing two manifests.
@@ -122,6 +123,7 @@ func GenerateManifest(cromFile string, codebookPath string, encryptionKey string
 			CodebookID: entry.CodebookID,
 			DeltaHash:  xxhash.Sum64(residual),
 			ChunkSize:  entry.OriginalSize,
+			CodebookIndex: entry.CodebookIndex,
 		}
 	}
 
@@ -160,9 +162,9 @@ func FromJSON(data []byte) (*ChunkManifest, error) {
 //	OriginalHash  (32 bytes)
 //	OriginalSize  (8 bytes)
 //	ChunkCount    (4 bytes)
-//	Entries       (ChunkCount * 20 bytes each)
+//	Entries       (ChunkCount * 21 bytes each)
 //
-// Total header: 46 bytes + (ChunkCount * 20) bytes
+// Total header: 46 bytes + (ChunkCount * 21) bytes
 func (m *ChunkManifest) ToBinary() []byte {
 	headerSize := 2 + 32 + 8 + 4
 	buf := make([]byte, headerSize+len(m.Entries)*ManifestEntryBinarySize)
@@ -177,6 +179,7 @@ func (m *ChunkManifest) ToBinary() []byte {
 		binary.LittleEndian.PutUint64(buf[off:off+8], e.CodebookID)
 		binary.LittleEndian.PutUint64(buf[off+8:off+16], e.DeltaHash)
 		binary.LittleEndian.PutUint32(buf[off+16:off+20], e.ChunkSize)
+		buf[off+20] = e.CodebookIndex
 	}
 
 	return buf
@@ -207,6 +210,7 @@ func FromBinary(data []byte) (*ChunkManifest, error) {
 			CodebookID: binary.LittleEndian.Uint64(data[off : off+8]),
 			DeltaHash:  binary.LittleEndian.Uint64(data[off+8 : off+16]),
 			ChunkSize:  binary.LittleEndian.Uint32(data[off+16 : off+20]),
+			CodebookIndex: data[off+20],
 		}
 	}
 

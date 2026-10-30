@@ -6,12 +6,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/MrJc01/crompressor/internal/codebook"
+	"github.com/MrJc01/crompressor/internal/trainer"
 	"github.com/MrJc01/crompressor/pkg/cromlib"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -26,25 +28,38 @@ func TestTwoNodeSync(t *testing.T) {
 	dirA := t.TempDir()
 	dirB := t.TempDir()
 
-	// 2. Find/Generate Codebook
-	codebookPath := "../../testdata/trained.cromdb"
-	if _, err := os.Stat(codebookPath); os.IsNotExist(err) {
-		t.Skip("Codebook not found. Run 'make gen-codebook' first.")
-	}
+	// 2. Both nodes share a brain trained on the old version of the file
+	oldData := make([]byte, 1024*1024)
+	rand.New(rand.NewSource(11)).Read(oldData)
 
-	// 3. Create a synthetic file and pack it in Node A's directory
-	originalFile := filepath.Join(dirA, "source.txt")
-	testData := []byte("CROM P2P Integration Test - Hello World! " +
-		"This proves that the SyncProtocol works end-to-end.")
-	if err := os.WriteFile(originalFile, testData, 0644); err != nil {
+	trainDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(trainDir, "old.bin"), oldData, 0644); err != nil {
+		t.Fatal(err)
+	}
+	codebookPath := filepath.Join(t.TempDir(), "shared.cromdb")
+	trainOpts := trainer.DefaultTrainOptions()
+	trainOpts.InputDir = trainDir
+	trainOpts.OutputPath = codebookPath
+	trainOpts.ChunkSize = 4096
+	trainOpts.MaxCodewords = 1024
+	if _, err := trainer.Train(trainOpts); err != nil {
 		t.Fatal(err)
 	}
 
-	cromFileA := filepath.Join(dirA, "source.txt.crom")
-	opts := cromlib.DefaultPackOptions()
-	if _, err := cromlib.Pack(originalFile, cromFileA, codebookPath, opts); err != nil {
-		t.Fatalf("Failed to pack file: %v", err)
+	// 3. Node A has the new version, with one byte inserted; node B has the old one
+	testData := append([]byte("X"), oldData...)
+	pack := func(data []byte, dir string) {
+		t.Helper()
+		src := filepath.Join(dir, "source.bin")
+		if err := os.WriteFile(src, data, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := cromlib.Pack(src, filepath.Join(dir, "source.bin.crom"), codebookPath, cromlib.DefaultPackOptions()); err != nil {
+			t.Fatalf("Failed to pack file: %v", err)
+		}
 	}
+	pack(testData, dirA)
+	pack(oldData, dirB)
 
 	// 4. Start Node A (Sender)
 	nodeA, err := NewCromNode(codebookPath, 0, dirA, "") // port 0 = random
@@ -103,18 +118,22 @@ func TestTwoNodeSync(t *testing.T) {
 
 	// 8. Node B requests Sync
 	fmt.Println("--- Inciando Sincronização ---")
-	err = syncProtoB.RequestSync(ctx, nodeA.PeerID(), "source.txt.crom")
+	err = syncProtoB.RequestSync(ctx, nodeA.PeerID(), "source.bin.crom")
 	if err != nil {
 		t.Fatalf("Sync failed: %v", err)
 	}
 
 	// 9. Verify the received file on Node B
-	cromFileB := filepath.Join(dirB, "source.txt.crom")
+	if limit := int64(len(testData)) / 10; syncProtoB.BytesReceived > limit {
+		t.Errorf("sync read %d bytes from the network, want at most %d", syncProtoB.BytesReceived, limit)
+	}
+
+	cromFileB := filepath.Join(dirB, "source.bin.crom")
 	if _, err := os.Stat(cromFileB); os.IsNotExist(err) {
 		t.Fatal("Node B did not save the synchronized file")
 	}
 
-	restoredFileB := filepath.Join(dirB, "restored.txt")
+	restoredFileB := filepath.Join(dirB, "restored.bin")
 	if err := cromlib.Unpack(cromFileB, restoredFileB, codebookPath, cromlib.DefaultUnpackOptions()); err != nil {
 		t.Fatalf("Failed to unpack synchronized file: %v", err)
 	}
@@ -125,7 +144,7 @@ func TestTwoNodeSync(t *testing.T) {
 	}
 
 	if !bytes.Equal(testData, restoredData) {
-		t.Fatalf("Data mismatch!\nExpected: %s\nGot:      %s", testData, restoredData)
+		t.Fatal("Data mismatch after sync")
 	}
 
 	// Also verify that codebook open doesn't panic on the new nodes
