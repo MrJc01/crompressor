@@ -98,9 +98,13 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 	ft := NewFrequencyTable()
 	fc := chunker.NewFixedChunker(opts.ChunkSize)
 
-	fileChan := make(chan string, len(files))
-	for _, f := range files {
-		fileChan <- f
+	type trainFile struct {
+		path string
+		base uint64 // Files keep their order: each one gets its own range of positions
+	}
+	fileChan := make(chan trainFile, len(files))
+	for i, f := range files {
+		fileChan <- trainFile{f, uint64(i) << 44}
 	}
 	close(fileChan)
 
@@ -118,8 +122,9 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 			defer wg.Done()
 			buf := make([]byte, 16*1024*1024) // 16MB read buffer
 
-			for path := range fileChan {
-				f, err := os.Open(path)
+			for tf := range fileChan {
+				pos := tf.base
+				f, err := os.Open(tf.path)
 				if err != nil {
 					continue
 				}
@@ -142,13 +147,14 @@ func Train(opts TrainOptions) (*TrainResult, error) {
 							chunks := fc.Split(buf[:n])
 							for _, c := range chunks {
 								if len(c.Data) == opts.ChunkSize {
-									ft.Record(c.Data)
+									ft.RecordAt(c.Data, pos+c.Offset)
 								}
 							}
 							mu.Lock()
 							totalBytes += uint64(n)
 							mu.Unlock()
 						}
+						pos += uint64(n)
 						opts.OnProgress(n)
 					}
 					if errRead == io.EOF {

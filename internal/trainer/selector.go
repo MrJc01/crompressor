@@ -21,10 +21,10 @@ func SelectElite(table *FrequencyTable, maxCodewords int, maxPerBucket int) [][]
 
 	// Track how many codewords are in each LSH bucket
 	bucketCount := make(map[uint16]int)
-	selected := make([][]byte, 0, maxCodewords)
+	picked := make([]*PatternEntry, 0, maxCodewords)
 
 	for _, entry := range all {
-		if len(selected) >= maxCodewords {
+		if len(picked) >= maxCodewords {
 			break
 		}
 
@@ -35,10 +35,19 @@ func SelectElite(table *FrequencyTable, maxCodewords int, maxPerBucket int) [][]
 			continue
 		}
 
-		selected = append(selected, entry.Data)
+		picked = append(picked, entry)
 		bucketCount[bucket]++
 	}
 
+	// Files tend to reuse patterns in the order they were learned, which makes
+	// consecutive IDs and a chunk table that compresses to almost nothing.
+	sort.SliceStable(picked, func(i, j int) bool {
+		return picked[i].First < picked[j].First
+	})
+	selected := make([][]byte, len(picked))
+	for i, entry := range picked {
+		selected[i] = entry.Data
+	}
 	return selected
 }
 

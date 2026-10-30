@@ -161,7 +161,7 @@ func (cr *Reader) readCompressedTable(header *Header, key []byte) ([]ChunkEntry,
 		return nil, fmt.Errorf("format: read table size: %w", err)
 	}
 	size := binary.LittleEndian.Uint32(sizeBuf[:])
-	maxSize := uint64(header.ChunkCount)*uint64(GetEntrySize(header.Version)) + 1024
+	maxSize := uint64(header.ChunkCount)*maxColumnBytesPerEntry + 1024
 	if uint64(size) > maxSize+maxSize/8 {
 		return nil, fmt.Errorf("format: compressed table size %d is implausible", size)
 	}
@@ -186,9 +186,8 @@ func (cr *Reader) readCompressedTable(header *Header, key []byte) ([]ChunkEntry,
 	if err != nil {
 		return nil, fmt.Errorf("format: decompress chunk table: %w", err)
 	}
-	entries, err := ParseChunkTable(table, header.ChunkCount, header.Version)
-	if err != nil {
-		return nil, fmt.Errorf("format: parse chunk table: %w", err)
-	}
-	return entries, nil
+	return decodeTableColumns(table, header.ChunkCount)
 }
+
+// maxColumnBytesPerEntry bounds one entry in columns: 10+10+5+5 varint bytes and an index.
+const maxColumnBytesPerEntry = 31

@@ -376,6 +376,85 @@ func GetEntrySize(version uint16) uint32 {
 	return EntrySizeV6
 }
 
+// encodeTableColumns lays the table out in columns, as differences from what is
+// expected: a brain numbered in order of appearance makes most of them zero.
+func encodeTableColumns(entries []ChunkEntry) []byte {
+	var ids, offsets, deltaSizes, sizes []byte
+	indexes := make([]byte, 0, len(entries))
+	var prevID, nextOffset uint64
+	for _, e := range entries {
+		if e.CodebookID == LiteralCodebookID {
+			ids = append(ids, 0)
+		} else {
+			ids = binary.AppendUvarint(ids, zigzag(int64(e.CodebookID-prevID))+1)
+			prevID = e.CodebookID + 1
+		}
+		offsets = binary.AppendUvarint(offsets, zigzag(int64(e.DeltaOffset-nextOffset)))
+		nextOffset = e.DeltaOffset + uint64(e.DeltaSize)
+		deltaSizes = binary.AppendUvarint(deltaSizes, uint64(e.DeltaSize))
+		sizes = binary.AppendUvarint(sizes, uint64(e.OriginalSize))
+		indexes = append(indexes, e.CodebookIndex)
+	}
+	out := make([]byte, 0, len(ids)+len(offsets)+len(deltaSizes)+len(sizes)+len(indexes))
+	for _, col := range [][]byte{ids, offsets, deltaSizes, sizes} {
+		out = binary.AppendUvarint(out, uint64(len(col)))
+		out = append(out, col...)
+	}
+	return append(out, indexes...)
+}
+
+// decodeTableColumns reverses encodeTableColumns.
+func decodeTableColumns(data []byte, count uint32) ([]ChunkEntry, error) {
+	bad := errors.New("format: malformed chunk table")
+	cols := make([][]byte, 4)
+	for i := range cols {
+		size, n := binary.Uvarint(data)
+		if n <= 0 || size > uint64(len(data)-n) {
+			return nil, bad
+		}
+		cols[i], data = data[n:n+int(size)], data[n+int(size):]
+	}
+	if uint64(len(data)) != uint64(count) {
+		return nil, bad
+	}
+	next := func(col int) (uint64, error) {
+		v, n := binary.Uvarint(cols[col])
+		if n <= 0 {
+			return 0, bad
+		}
+		cols[col] = cols[col][n:]
+		return v, nil
+	}
+	entries := make([]ChunkEntry, count)
+	var prevID, nextOffset uint64
+	for i := range entries {
+		values := [4]uint64{}
+		for col := range values {
+			v, err := next(col)
+			if err != nil {
+				return nil, err
+			}
+			values[col] = v
+		}
+		e := &entries[i]
+		if values[0] == 0 {
+			e.CodebookID = LiteralCodebookID
+		} else {
+			e.CodebookID = prevID + uint64(unzigzag(values[0]-1))
+			prevID = e.CodebookID + 1
+		}
+		e.DeltaOffset = nextOffset + uint64(unzigzag(values[1]))
+		e.DeltaSize = uint32(values[2])
+		e.OriginalSize = uint32(values[3])
+		e.CodebookIndex = data[i]
+		nextOffset = e.DeltaOffset + uint64(e.DeltaSize)
+	}
+	return entries, nil
+}
+
+func zigzag(v int64) uint64   { return uint64(v<<1) ^ uint64(v>>63) }
+func unzigzag(u uint64) int64 { return int64(u>>1) ^ -int64(u&1) }
+
 // EncodeCompressedTable returns the on-disk form of a compressed chunk table.
 func EncodeCompressedTable(entries []ChunkEntry, version uint16, key []byte) ([]byte, error) {
 	enc, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedBestCompression), zstd.WithEncoderConcurrency(1))
@@ -383,7 +462,7 @@ func EncodeCompressedTable(entries []ChunkEntry, version uint16, key []byte) ([]
 		return nil, fmt.Errorf("format: init table encoder: %w", err)
 	}
 	defer enc.Close()
-	blob := enc.EncodeAll(SerializeChunkTable(entries, version), nil)
+	blob := enc.EncodeAll(encodeTableColumns(entries), nil)
 	if key != nil {
 		if blob, err = crypto.Encrypt(key, blob); err != nil {
 			return nil, fmt.Errorf("format: encrypt chunk table: %w", err)

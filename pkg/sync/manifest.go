@@ -178,12 +178,17 @@ func (m *ChunkManifest) ToBinary() []byte {
 	binary.LittleEndian.PutUint64(buf[34:42], m.OriginalSize)
 	binary.LittleEndian.PutUint32(buf[42:46], m.ChunkCount)
 
+	// Columns, with IDs as differences, so that compression makes the manifest tiny.
+	n := len(m.Entries)
+	ids, hashes := buf[headerSize:], buf[headerSize+n*8:]
+	sizes, indexes := buf[headerSize+n*16:], buf[headerSize+n*20:]
+	var prevID uint64
 	for i, e := range m.Entries {
-		off := headerSize + i*ManifestEntryBinarySize
-		binary.LittleEndian.PutUint64(buf[off:off+8], e.CodebookID)
-		binary.LittleEndian.PutUint64(buf[off+8:off+16], e.DeltaHash)
-		binary.LittleEndian.PutUint32(buf[off+16:off+20], e.ChunkSize)
-		buf[off+20] = e.CodebookIndex
+		binary.LittleEndian.PutUint64(ids[i*8:], e.CodebookID-prevID)
+		prevID = e.CodebookID
+		binary.LittleEndian.PutUint64(hashes[i*8:], e.DeltaHash)
+		binary.LittleEndian.PutUint32(sizes[i*4:], e.ChunkSize)
+		indexes[i] = e.CodebookIndex
 	}
 
 	return buf
@@ -208,13 +213,17 @@ func FromBinary(data []byte) (*ChunkManifest, error) {
 	}
 
 	m.Entries = make([]ManifestEntry, m.ChunkCount)
-	for i := uint32(0); i < m.ChunkCount; i++ {
-		off := headerSize + int(i)*ManifestEntryBinarySize
+	n := int(m.ChunkCount)
+	ids, hashes := data[headerSize:], data[headerSize+n*8:]
+	sizes, indexes := data[headerSize+n*16:], data[headerSize+n*20:]
+	var prevID uint64
+	for i := 0; i < n; i++ {
+		prevID += binary.LittleEndian.Uint64(ids[i*8:])
 		m.Entries[i] = ManifestEntry{
-			CodebookID: binary.LittleEndian.Uint64(data[off : off+8]),
-			DeltaHash:  binary.LittleEndian.Uint64(data[off+8 : off+16]),
-			ChunkSize:  binary.LittleEndian.Uint32(data[off+16 : off+20]),
-			CodebookIndex: data[off+20],
+			CodebookID:    prevID,
+			DeltaHash:     binary.LittleEndian.Uint64(hashes[i*8:]),
+			ChunkSize:     binary.LittleEndian.Uint32(sizes[i*4:]),
+			CodebookIndex: indexes[i],
 		}
 	}
 
