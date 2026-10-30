@@ -88,21 +88,7 @@ func (f *CromFile) Flush(ctx context.Context, fh fs.FileHandle) syscall.Errno {
 // Mount mounts a .crom file at the given mountpoint.
 // It blocks until the filesystem is unmounted.
 func Mount(cromFile string, mountPoint string, codebookFile string, encryptionKey string, maxMB int) error {
-	var cb *codebook.Reader
 	var err error
-
-	if strings.HasPrefix(codebookFile, "bitswap://") || strings.HasPrefix(codebookFile, "ipfs://") {
-		// V20: P2P Bitswap Codebook Loading (Sharding on demand)
-		fmt.Printf("🌐 Conectando à DHT Kademlia para injetar páginas do Codebook: %s\n", codebookFile)
-		// cb, err = network.NewBitswapCodebook(codebookFile) // Implementação futura de p2p mmap
-	} else {
-		cb, err = codebook.Open(codebookFile)
-	}
-
-	if err != nil {
-		return fmt.Errorf("mount: failed to auto-load codebook: %w", err)
-	}
-	defer cb.Close()
 
 	var file io.ReaderAt
 	var fileSize int64
@@ -142,6 +128,23 @@ func Mount(cromFile string, mountPoint string, codebookFile string, encryptionKe
 	header, blockTable, entries, err := reader.ReadMetadata(encryptionKey)
 	if err != nil {
 		return fmt.Errorf("mount: failed to parse format metadata: %w", err)
+	}
+
+	// Files made only of literals need no brain, and some files carry their own.
+	needsBrain := header.UsesBrainDict
+	for _, e := range entries {
+		if e.CodebookID != format.LiteralCodebookID && e.CodebookIndex != format.FractalCodebookIndex {
+			needsBrain = true
+			break
+		}
+	}
+	var cb *codebook.Reader
+	if needsBrain {
+		cb, err = codebook.OpenForFile(header.MicroDictSize, header.MicroDictionaryData, header.IsEncrypted, header.Salt[:], codebookFile, encryptionKey)
+		if err != nil {
+			return fmt.Errorf("mount: %w", err)
+		}
+		defer cb.Close()
 	}
 
 	randomReader, err := NewRandomReader(file, fileSize, header, blockTable, entries, cb, encryptionKey, maxMB)
@@ -195,7 +198,9 @@ func Mount(cromFile string, mountPoint string, codebookFile string, encryptionKe
 	fmt.Printf("✔ CROM Virtual Filesystem montado com sucesso!\n")
 	fmt.Printf("  Arquivo:  %s\n", cromFile)
 	fmt.Printf("  Ponto:    %s\n", mountPoint)
-	fmt.Printf("  Codebook: %s\n", codebookFile)
+	if codebookFile != "" {
+		fmt.Printf("  Codebook: %s\n", codebookFile)
+	}
 	fmt.Println("  Soberania: Watcher ativo (codebook + signals)")
 	fmt.Println("Pressione Ctrl+C para desmontar...")
 

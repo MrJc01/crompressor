@@ -16,18 +16,19 @@ import (
 
 // RandomReader provides an io.ReaderAt interface over a .crom file.
 type RandomReader struct {
-	file         io.ReaderAt
-	fileSize     int64
-	header       *format.Header
-	blockTable   []uint32
-	blockOffsets []int64 // precalculated absolute offsets in the .crom file
-	entries      []format.ChunkEntry
-	blockStarts  []int    // first chunk of each block
-	chunkEnds    []uint64 // original offset where each chunk ends
-	cb           *codebook.Reader
-	memCache     *MemoryCache
-	derivedKey   []byte
-	dataOffset   int64 // Absolute offset where raw passthrough data or the first block starts
+	file             io.ReaderAt
+	fileSize         int64
+	header           *format.Header
+	blockTable       []uint32
+	blockOffsets     []int64 // precalculated absolute offsets in the .crom file
+	entries          []format.ChunkEntry
+	blockStarts      []int    // first chunk of each block
+	chunkEnds        []uint64 // original offset where each chunk ends
+	cb               *codebook.Reader
+	memCache         *MemoryCache
+	derivedKey       []byte
+	passthroughPlain []byte
+	dataOffset       int64 // Absolute offset where raw passthrough data or the first block starts
 
 	mu sync.Mutex // Protects cache/disk reads to avoid redundant decompression of the same block
 }
@@ -80,6 +81,9 @@ func NewRandomReader(f io.ReaderAt, fileSize int64, header *format.Header, block
 	if header.TableBytes > 0 {
 		tableSize = int(header.TableBytes)
 	}
+	if header.ChunkCount == 0 {
+		tableSize = 0
+	}
 	baseOffset := int64(hSize + len(blockTable)*4 + tableSize)
 
 	rr.blockOffsets = make([]int64, len(blockTable))
@@ -113,11 +117,15 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 	}
 
 	dest = dest[:bytesToRead]
-	
+
 	// Fast path for Passthrough files (0 chunks or IsPassthrough flag)
 	if rr.header.ChunkCount == 0 || rr.header.IsPassthrough {
 		if rr.header.IsEncrypted {
-			return 0, fmt.Errorf("vfs: encrypted passthrough files cannot be mounted, use unpack")
+			plain, err := rr.decryptPassthrough()
+			if err != nil {
+				return 0, err
+			}
+			return copy(dest, plain[off:]), nil
 		}
 		return rr.file.ReadAt(dest, rr.dataOffset+off)
 	}
@@ -142,7 +150,7 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 		// 🚀 L2 CHUNK CACHE BYPASS
 		// ===========================
 		var reconstructedChunk []byte
-		
+
 		if cachedChunk, ok := rr.memCache.Get(int64(chunkIndex)); ok {
 			reconstructedChunk = cachedChunk
 		} else if entry.CodebookIndex == format.FractalCodebookIndex {
@@ -156,21 +164,21 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 				fmt.Fprintf(os.Stderr, "[VFS-DETECTOR] Falha loadBlockPool blocID=%d: %v\n", blockID, err)
 				return bytesRead, fmt.Errorf("vfs: read block %d: %w", blockID, err)
 			}
-	
+
 			// Calculate localized block start offset
 			blockStartChunkIdx := int64(rr.blockStarts[blockID])
 			blockStartGlobalOffset := rr.entries[blockStartChunkIdx].DeltaOffset
-	
+
 			entryLocalOffset := entry.DeltaOffset - blockStartGlobalOffset
-	
+
 			endOffset := entryLocalOffset + uint64(entry.DeltaSize)
 			if endOffset > uint64(len(pool)) {
 				fmt.Fprintf(os.Stderr, "[VFS-DETECTOR] Delta Bounds Error: chunk=%d localOff=%d endOff=%d poolLen=%d (blockID=%d)\n", chunkIndex, entryLocalOffset, endOffset, len(pool), blockID)
 				return bytesRead, fmt.Errorf("vfs: delta bounds error on chunk %d", chunkIndex)
 			}
-	
+
 			res := pool[entryLocalOffset:endOffset]
-	
+
 			if entry.CodebookID == format.LiteralCodebookID {
 				reconstructedChunk = res
 			} else {
@@ -205,7 +213,7 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 		if uint32(len(reconstructedChunk)) > entry.OriginalSize {
 			reconstructedChunk = reconstructedChunk[:entry.OriginalSize]
 		}
-		
+
 		// L2 CACHE INJECTION
 		if entry.CodebookID != format.LiteralCodebookID {
 			cacheCopy := make([]byte, len(reconstructedChunk))
@@ -240,6 +248,25 @@ func (rr *RandomReader) ReadAt(dest []byte, off int64) (int, error) {
 	}
 
 	return bytesRead, nil
+}
+
+// decryptPassthrough decrypts the whole payload once: AES-GCM has no random access.
+func (rr *RandomReader) decryptPassthrough() ([]byte, error) {
+	rr.mu.Lock()
+	defer rr.mu.Unlock()
+	if rr.passthroughPlain != nil {
+		return rr.passthroughPlain, nil
+	}
+	enc := make([]byte, rr.fileSize-rr.dataOffset)
+	if _, err := rr.file.ReadAt(enc, rr.dataOffset); err != nil && err != io.EOF {
+		return nil, fmt.Errorf("vfs: read passthrough: %w", err)
+	}
+	plain, err := crypto.Decrypt(rr.derivedKey, enc)
+	if err != nil {
+		return nil, fmt.Errorf("vfs: decrypt passthrough: %w", err)
+	}
+	rr.passthroughPlain = plain
+	return plain, nil
 }
 
 // loadBlockPool reads an encrypted Zstd frame from disk, or returns it from cache.

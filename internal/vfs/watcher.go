@@ -56,6 +56,9 @@ func (w *SovereigntyWatcher) Start() {
 				return
 
 			case <-ticker.C:
+				if w.codebookPath == "" {
+					continue // Brain embedded in the file, or none needed
+				}
 				if _, err := os.Stat(w.codebookPath); os.IsNotExist(err) {
 					fmt.Fprintf(os.Stderr, "\n🛡️ SOBERANIA VIOLADA: Codebook removido (%s). Desmontagem forçada!\n", w.codebookPath)
 					w.unmount()

@@ -31,37 +31,6 @@ func DefaultUnpackOptions() UnpackOptions {
 	}
 }
 
-// openBrain returns the brain embedded in the file or, without one, the one at path.
-func openBrain(header *format.Header, path, encryptionKey string) (*codebook.Reader, error) {
-	if header.MicroDictSize == 0 {
-		if path == "" {
-			return nil, fmt.Errorf("unpack: este arquivo precisa do cérebro usado no pack (--codebook)")
-		}
-		cb, err := codebook.Open(path)
-		if err != nil {
-			return nil, fmt.Errorf("unpack: failed to open codebook: %w", err)
-		}
-		return cb, nil
-	}
-	micro := header.MicroDictionaryData
-	if header.IsEncrypted {
-		dec, err := crypto.Decrypt(crypto.DeriveKey([]byte(encryptionKey), header.Salt[:]), micro)
-		if err != nil {
-			return nil, fmt.Errorf("unpack: decrypt embedded brain: %w", err)
-		}
-		micro = dec
-	}
-	brain, err := delta.DecompressPool(micro)
-	if err != nil {
-		return nil, fmt.Errorf("unpack: decompress embedded brain: %w", err)
-	}
-	cb, err := codebook.OpenFromBytes(brain)
-	if err != nil {
-		return nil, fmt.Errorf("unpack: open embedded brain: %w", err)
-	}
-	return cb, nil
-}
-
 // Unpack reads a .crom file, extracts the deltas, looks up the codewords,
 // rebuilds the original file directly to disk via streaming to prevent memory overflow.
 // The output only appears at outputPath after it passes the integrity check.
@@ -90,7 +59,7 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) (err
 	}
 	var cb *codebook.Reader
 	if needsBrain {
-		if cb, err = openBrain(header, codebookPath, opts.EncryptionKey); err != nil {
+		if cb, err = codebook.OpenForFile(header.MicroDictSize, header.MicroDictionaryData, header.IsEncrypted, header.Salt[:], codebookPath, opts.EncryptionKey); err != nil {
 			return err
 		}
 		defer cb.Close()
@@ -169,7 +138,7 @@ func Unpack(inputPath, outputPath, codebookPath string, opts UnpackOptions) (err
 	}
 	if header.UsesBrainDict {
 		if cb == nil {
-			if cb, err = openBrain(header, codebookPath, opts.EncryptionKey); err != nil {
+			if cb, err = codebook.OpenForFile(header.MicroDictSize, header.MicroDictionaryData, header.IsEncrypted, header.Salt[:], codebookPath, opts.EncryptionKey); err != nil {
 				return err
 			}
 			defer cb.Close()
