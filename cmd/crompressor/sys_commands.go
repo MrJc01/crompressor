@@ -37,7 +37,7 @@ func daemonCmd() *cobra.Command {
 	var codebookPath, dataDir, encKey string
 	var listenPort int
 	var bootstrapAddrs []string
-	var allowHiveMind bool
+	var allowHiveMind, privateDHT bool
 	cmd := &cobra.Command{Use: "daemon", Short: "Inicia o nó P2P do CROM para sincronização na rede soberana", Long: `Inicia um nó libp2p que participa da rede CROM definida pelo Codebook informado.
 O nó irá descobrir outros peers via mDNS (LAN) e DHT (WAN), e permitirá a sincronização
 de arquivos .crom na pasta data-dir.`, RunE: func(cmd *cobra.Command, args []string) error {
@@ -72,7 +72,7 @@ de arquivos .crom na pasta data-dir.`, RunE: func(cmd *cobra.Command, args []str
 			fmt.Printf("🔒 Hive Mind Desativada: GossipSub ignorará payloads de Brains externos.\n")
 		}
 		syncProto := network.NewSyncProtocol(node)
-		if err := node.SetupDHT(bootstrapAddrs); err != nil {
+		if err := node.SetupDHT(bootstrapAddrs, privateDHT); err != nil {
 			fmt.Printf("Aviso: DHT falhou em iniciar: %v\n", err)
 		}
 		fmt.Println("✔ Nó P2P iniciado com sucesso.")
@@ -135,6 +135,7 @@ de arquivos .crom na pasta data-dir.`, RunE: func(cmd *cobra.Command, args []str
 	cmd.Flags().IntVarP(&listenPort, "port", "p", 4001, "Porta TCP/QUIC do libp2p")
 	cmd.Flags().StringSliceVar(&bootstrapAddrs, "bootstrap", nil, "Endereços multiaddr para bootstrap DHT")
 	cmd.Flags().StringVarP(&encKey, "encrypt", "e", "", "Chave AES para ler os pacotes. Requerida se os .crom estiverem encriptados.")
+	cmd.Flags().BoolVar(&privateDHT, "private-dht", false, "Usa uma DHT própria da rede CROM, em vez da DHT pública")
 	cmd.Flags().BoolVar(&allowHiveMind, "allow-hive-mind", false, "Habilita Quarentena e Aceitação de Brains via P2P (Opt-in Hive Mind)")
 	return cmd
 }
@@ -202,8 +203,8 @@ func mountCmd() *cobra.Command {
 	var input, mountPoint, codebookPath, encryptionKey string
 	var cacheMB int
 	cmd := &cobra.Command{Use: "mount", Short: "Monta um arquivo .crom como um VFS (Virtual Filesystem)", Long: `Monta o arquivo compactado em um diretório vazio para leitura sob demanda (Lazy Loading) do conteúdo original.`, RunE: func(cmd *cobra.Command, args []string) error {
-		if input == "" || mountPoint == "" || codebookPath == "" {
-			return fmt.Errorf("flags --input, --mountpoint e --codebook são obrigatórias")
+		if input == "" || mountPoint == "" {
+			return fmt.Errorf("flags --input e --mountpoint são obrigatórias")
 		}
 		isCloud := len(input) > 7 && (input[:7] == "http://" || input[:8] == "https://")
 		fmt.Println("╔═══════════════════════════════════════════╗")
@@ -215,7 +216,9 @@ func mountCmd() *cobra.Command {
 		fmt.Println("╠═══════════════════════════════════════════╣")
 		fmt.Printf("║  Input:    %-30s ║\n", input)
 		fmt.Printf("║  Mount:    %-30s ║\n", mountPoint)
-		fmt.Printf("║  Codebook: %-30s ║\n", codebookPath)
+		if codebookPath != "" {
+			fmt.Printf("║  Codebook: %-30s ║\n", codebookPath)
+		}
 		if isCloud {
 			fmt.Printf("║  Mode:     HTTP Range Requests (S3/CDN)   ║\n")
 		}

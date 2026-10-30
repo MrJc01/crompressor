@@ -27,9 +27,14 @@ var DefaultBootstrapPeers = []string{
 }
 
 // SetupDHT initializes the Kademlia Distributed Hash Table for WAN discovery.
-func (n *CromNode) SetupDHT(bootstrapAddrs []string) error {
+// A private DHT (own protocol prefix) also accepts peers on private addresses.
+func (n *CromNode) SetupDHT(bootstrapAddrs []string, private bool) error {
 	var err error
-	n.DHT, err = dht.New(n.ctx, n.Host, dht.Mode(dht.ModeServer))
+	opts := []dht.Option{dht.Mode(dht.ModeServer)}
+	if private {
+		opts = append(opts, dht.ProtocolPrefix("/crom"))
+	}
+	n.DHT, err = dht.New(n.ctx, n.Host, opts...)
 	if err != nil {
 		return fmt.Errorf("discovery: failed to create DHT: %w", err)
 	}
@@ -38,7 +43,7 @@ func (n *CromNode) SetupDHT(bootstrapAddrs []string) error {
 		return fmt.Errorf("discovery: failed to bootstrap DHT: %w", err)
 	}
 
-	if len(bootstrapAddrs) == 0 {
+	if len(bootstrapAddrs) == 0 && !private {
 		bootstrapAddrs = DefaultBootstrapPeers
 	}
 
